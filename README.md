@@ -1,6 +1,6 @@
 # Методы оптимизации — анимированный учебник по ЛР1 и ЛР2 (вариант 21)
 
-Учебник вместо видео на YouTube, сделанный на **[Papermorph](https://github.com/DozenTwelve/Papermorph)** (скилл установлен, движок `engine-v2.12`): озвученные уроки, где графики, итерации методов и код из листингов оживают под рассказ, а проверки и практика идут прямо в уроке.
+Учебник вместо видео на YouTube на движке **[Papermorph](https://github.com/DozenTwelve/Papermorph)** `engine-v2.12` (копия движка — в `site/opt/lib`, проверена: в сеть не обращается; сам скилл Papermorph из проекта удалён из-за предупреждений аудита безопасности): озвученные уроки, где графики, итерации методов и код из листингов оживают под рассказ, а проверки и практика идут прямо в уроке.
 
 **Всё содержание — строго по отчётам ЛР1 и ЛР2:** те же методы (равномерный поиск, золотое сечение, Брент; касательные, Брент), формулировки, обозначения, код из листингов, таблицы и выводы. Методы, которых нет в отчётах, есть только в Лаборатории — для сравнения.
 
@@ -37,14 +37,11 @@ python -m http.server 8766 -d site
 ## Для разработки
 
 ```sh
-npx skills experimental_install            # восстановить скилл Papermorph из skills-lock.json
-SKILL=.claude/skills/papermorph
-python $SKILL/scripts/engine.py site/opt   # синхронизировать движок
-uv run --with edge-tts $SKILL/scripts/tts.py content/opt/chNN/narration.ru.json site/opt/chNN/audio/ru   # озвучка
-python $SKILL/scripts/lint.py site/opt --content content/opt --brief books/opt                           # проверки
+python tools/tts.py content/opt/chNN/narration.ru.json site/opt/chNN/audio/ru   # озвучка (Edge TTS), нужен ffmpeg
 uv run --with playwright tools/shots.py NN     # скриншоты шагов главы
+uv run --with playwright tools/errs.py opt NN  # ошибки по всем шагам главы
 uv run --with playwright tools/build_bank.py   # банк вопросов экзамена
 python tools/sync_toc.py                       # оглавление из глав
 ```
 
-Устройство книги: `books/opt/style.json` (настройки Papermorph), `content/opt/chNN/narration.ru.json` (озвучка), `site/opt/` (готовый учебник: `lib/` — движок Papermorph, `opt.js` — графики, формулы, листинги, `methods.js` — методы, сверенные с программами, `board.js` — элементы доски, `gens.js` — генераторы задач). Правила написания глав — `AUTHORING.md`.
+Устройство книги: `books/opt/style.json` (настройки), `content/opt/chNN/narration.ru.json` (озвучка), `site/opt/` (готовый учебник: `lib/engine.js` и соседние файлы — движок Papermorph, не править; `opt.js` — графики, формулы, листинги; `methods.js` — методы, сверенные с программами; `board.js` — элементы доски; `gens.js` — генераторы задач). Правила написания глав — `AUTHORING.md`.

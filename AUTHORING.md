@@ -1,7 +1,6 @@
 # Как писать главу учебника «Методы оптимизации»
 
-Учебник сделан на **Papermorph** (скилл установлен в `.claude/skills/papermorph`, движок `engine-v2.12` синхронизирован в `site/opt/lib/` скриптом `engine.py`). Настройки книги — `books/opt/style.json`.
-Справка движка: `.claude/skills/papermorph/references/core/engine.md`, уроки: `references/lessons/lessons.md`, `authoring.md`, `questions.md`, `maths.md` — открывайте по мере надобности.
+Учебник сделан на движке **Papermorph** `engine-v2.12` (копия в `site/opt/lib/`: engine.js, math.js, contents.*, units.*, volume.*). Сам скилл Papermorph из проекта удалён по решению пользователя (предупреждения аудита безопасности) — его скрипты не используются. Настройки книги — `books/opt/style.json`.
 
 ## ГЛАВНОЕ ПРАВИЛО: строго по отчётам
 
@@ -34,15 +33,13 @@
 - `content/opt/chNN/narration.ru.json` — `{"voice": "ru-RU-SvetlanaNeural", "rate": "+0%", "beats": {"id": "текст"}}`; метки `[[имя]]` перед словом, в сцене `m('имя')`.
 - `site/opt/chNN/index.html` — подключения в таком порядке: `engine.css`, `katex/katex.min.css`, `opt.css`; скрипты `engine.js`, `math.js`, `board.js`, `katex/katex.min.js`, `methods.js`, `opt.js`, `audio/ru/timings.js`. Образец — `site/opt/ch03/index.html`.
 - `CHAPTER = { number, title, minutes, language: 'ru', next }`. **minutes** по правилу Papermorph: сумма `dur` из timings.js + 15 с на каждый вопрос в quiz(), округлить.
-- Никогда не править `lib/engine.js`, `lib/math.js`, `lib/contents.*`, `lib/units.*`, `lib/volume.*` (копии движка, их перезаписывает `engine.py`). Общие `lib/opt.js`, `lib/board.js`, `lib/methods.js` тоже не трогать — свои помощники объявляйте в главе (с префиксом, чтобы не совпасть с глобальными именами: `lint.py` это проверит).
+- Никогда не править `lib/engine.js`, `lib/math.js`, `lib/contents.*`, `lib/units.*`, `lib/volume.*` (копия движка Papermorph). Общие `lib/opt.js`, `lib/board.js`, `lib/methods.js` тоже не трогать — свои помощники объявляйте в главе (с префиксом, чтобы не совпасть с глобальными именами движка; повтор const остановит страницу — проверяйте tools/errs.py).
 
 ## Команды (из папки `uchebnik`)
 
 ```sh
 export PATH="$PATH:/c/Users/fors1ksx/AppData/Local/Microsoft/WinGet/Packages/Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe/ffmpeg-9.0.2-full_build/bin" PYTHONUTF8=1
-SKILL=.claude/skills/papermorph
-uv run -q --with edge-tts $SKILL/scripts/tts.py content/opt/chNN/narration.ru.json site/opt/chNN/audio/ru   # озвучка Papermorph
-python $SKILL/scripts/lint.py site/opt chNN --content content/opt --brief books/opt                         # статические проверки
+python tools/tts.py content/opt/chNN/narration.ru.json site/opt/chNN/audio/ru   # озвучка (Edge TTS) + timings.js
 uv run -q --with playwright tools/shots.py NN          # скриншоты shots/chNN/*.png (a — середина шага, z — конец) + ошибки
 uv run -q --with playwright tools/errs.py opt NN       # только ошибки по всем шагам
 ```
@@ -50,7 +47,7 @@ uv run -q --with playwright tools/errs.py opt NN       # только ошибк
 
 ## Озвучка
 
-- `tts.py` Papermorph читает текст как есть: **символы пишите словами** — «эпсилон», «фи», «фи штрих», «минус», «не больше», «икс один». Числа с запятой (`0,618`), без сокращений с точкой («т. е.»).
+- Пишите **символы словами** — «эпсилон», «фи», «фи штрих», «минус», «не больше», «икс один». Числа с запятой (`0,618`), без сокращений с точкой («т. е.»).
 - Разговорный русский лектора у доски, «вы», «ваш отчёт», «в вашей программе». Объясняйте почему. 9–13 минут на главу (глава 1 и 6 могут быть 7–9).
 - `q*`: «Проверка. …»; `final1`: «Практика главы. Задание первое.», `final2/3`: «Задание второе/третье.»; `finish`: «Глава пройдена. …».
 

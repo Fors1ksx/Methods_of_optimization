@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Тренажёр</title>
+<link rel="stylesheet" href="../lib/pages.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/extras.css">
+</head>
+<body>
+<header class="top" id="top"></header>
+<main class="page">
+  <p class="kicker">Практика без конца</p>
+  <h1>Тренажёр <i>методов</i></h1>
+  <p class="lede">Каждая задача — новые случайные числа. Решайте на листке, вводите ответ, сверяйтесь с решением. Задачи, где ошиблись или подсмотрели решение, попадают в «Работу над ошибками» внизу страницы.</p>
+  <div class="chips" id="chips" style="display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px"></div>
+  <div class="stats" id="stats"></div>
+  <div id="task"></div>
+  <h2 id="missH">Работа над ошибками тренажёра</h2>
+  <p class="lede" id="missNote"></p>
+  <div id="miss"></div>
+</main>
+<script src="../lib/pages.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/gens.js"></script>
+<script src="../lib/book.js"></script>
+<script>
+'use strict';
+topBar('trainer');
+const TYPES = [   // только методы и расчёты из отчётов ЛР1 и ЛР2
+  ['all', 'Всё вперемешку', ['analytic', 'convexity', 'uniformCount', 'uniformErr', 'goldenFirst', 'goldenNext', 'goldenN', 'traceGolden', 'vertex', 'brentAccept', 'tangentC', 'tangentSide', 'secant', 'countEvals'], '#ece8dc'],
+  ['an', 'Аналитика (ЛР1, ЛР2)', ['analytic', 'convexity'], '#8fd6b0'],
+  ['grid', 'Равномерный поиск', ['uniformCount', 'uniformErr'], '#f4a48c'],
+  ['gold', 'Золотое сечение', ['goldenFirst', 'goldenNext', 'goldenN', 'traceGolden'], '#f0b45a'],
+  ['br1', 'Брент (ЛР1)', ['vertex', 'brentAccept'], '#bba8ee'],
+  ['tan', 'Касательные (ЛР2)', ['tangentC', 'tangentSide'], '#e8a0c8'],
+  ['br2', 'Брент (ЛР2)', ['secant'], '#86c9e8'],
+  ['cnt', 'Подсчёт вычислений', ['countEvals'], '#f3c95c'],
+];
+const NAMES = { analytic: 'точный минимум', convexity: 'выпуклость', uniformCount: 'число узлов', uniformErr: 'ошибка сетки', goldenFirst: 'стартовые точки', goldenNext: 'шаг золотого сечения', goldenN: 'число итераций', traceGolden: 'ЛР1 по шагам', dichN: 'дихотомия', fibN: 'число Фибоначчи', vertex: 'вершина параболы', brentAccept: 'шаг Брента', tangentC: 'пересечение касательных', tangentSide: 'выбор стороны', secant: 'секущая', bisectN: 'средняя точка', countEvals: 'подсчёт вычислений' };
+let cur = 'all';
+const typeOf = g => TYPES.find(t => t[0] !== 'all' && t[2].includes(g));
+function stats() {
+  const p = loadProgress(), s = p.trainer || { right: 0, total: 0 };
+  $('stats').innerHTML = `<div><b>${s.total}</b><span>задач решено</span></div><div><b>${s.right}</b><span>верно с первой попытки</span></div><div><b>${s.total ? Math.round(100 * s.right / s.total) : 0}%</b><span>точность</span></div><div><b>${p.tasks.length}</b><span>в работе над ошибками</span></div>`;
+}
+function record(ok, I) {
+  progress(p => {
+    p.trainer = p.trainer || { right: 0, total: 0 };
+    p.trainer.total++; if (ok) p.trainer.right++;
+    if (!ok) { p.tasks = [{ g: I._g, q: I.q, fields: I.fields, opts: I.opts, a: I.a, sol: I.sol, hint: I.hint, why: I.why }, ...(p.tasks || [])].slice(0, 60); }
+  });
+  stats(); drawMiss(); missBadge();
+}
+function make() {
+  const list = TYPES.find(t => t[0] === cur)[2], g = list[Math.floor(Math.random() * list.length)];
+  const I = GEN[g](); I._g = g; return I;
+}
+function drawTask() {
+  const I = make(), t = typeOf(I._g);
+  const box = $('task'); box.innerHTML = '';
+  let card;
+  const regen = () => { const J = make(); return J; };
+  card = taskCard(I, { title: NAMES[I._g] || 'задача', tag: t ? t[1] : '', color: t ? t[3] : null, regen: () => { const J = make(); card.querySelector('.ph .tg') && (card.querySelector('.ph .tg').textContent = typeOf(J._g)?.[1] || ''); return J; }, onResult: record });
+  // кнопка «Следующая» есть у всех типов, включая тесты
+  const nxt = el('button', 'btn go', 'Следующая задача →'); nxt.onclick = drawTask;
+  box.append(card, nxt);
+}
+function drawMiss() {
+  const p = loadProgress(), m = $('miss'); m.innerHTML = '';
+  $('missNote').textContent = p.tasks.length ? `Задач к повторению: ${p.tasks.length}. Решите правильно — задача уйдёт из списка.` : 'Пока пусто: все задачи решены с первой попытки.';
+  p.tasks.forEach((I, k) => {
+    m.append(taskCard(I, { title: 'Повторить: ' + (NAMES[I.g] || 'задача'), tag: typeOf(I.g)?.[1] || '', color: typeOf(I.g)?.[3], onResult: ok => { if (ok) { progress(q => { q.tasks.splice(k, 1); }); setTimeout(() => { drawMiss(); stats(); missBadge(); }, 900); } } }));
+  });
+}
+$('chips').innerHTML = '';
+TYPES.forEach(([k, name, gs, col]) => {
+  const b = el('button', 'chip btn quiet sm', `${name} <small style="opacity:.6">${gs.length}</small>`);
+  b.style.borderColor = k === cur ? col : '';
+  b.onclick = () => { cur = k; [...$('chips').children].forEach((x, i) => x.style.borderColor = TYPES[i][0] === cur ? TYPES[i][3] : ''); drawTask(); };
+  $('chips').append(b);
+});
+stats(); drawTask(); drawMiss();
+</script>
+</body>
+</html>

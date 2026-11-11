@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Метод равномерного поиска</title>
+<link rel="stylesheet" href="../lib/engine.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/opt.css">
+<link rel="expect" href="#bar" blocking="render">
+</head>
+<body>
+<script src="../lib/engine.js"></script>
+<script src="../lib/math.js"></script>
+<script src="../lib/board.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/opt.js"></script>
+<script src="audio/ru/timings.js"></script>
+<script>
+'use strict';
+const CHAPTER = { number: 2, title: 'Метод равномерного поиска', minutes: 11, language: 'ru', next: '../ch03/' };
+const f = OPT.FN.f1.f;
+const G1 = (p, o = {}) => graph(p, 'f1', { x0: 120, y0: 790, w: 800, h: 520, xs: [1, 4, .5], ys: [.5, 1.3, .1], name: 'f(x)=x-2\\ln x', ...o });
+
+// Листинг отчёта, lab1_var21.py, строки 15–30: функция uniform.
+const C2_UNIFORM = [
+  '# ---------- метод 1: равномерный поиск ----------',
+  '# просто идём по сетке с шагом eps и запоминаем, где f меньше всего',
+  'def uniform(a, b, eps):',
+  '    n = round((b - a) / eps)      # сколько шагов',
+  '    h = (b - a) / n',
+  '    x_best = a',
+  '    f_best = f(a)',
+  '    cnt = 1                       # счётчик вычислений f',
+  '    for i in range(1, n + 1):',
+  '        x = a + i * h',
+  '        fx = f(x)',
+  '        cnt += 1',
+  '        if fx < f_best:',
+  '            x_best = x',
+  '            f_best = fx',
+  '    return x_best, f_best, n + 1, cnt   # тут итерация = одно вычисление',
+];
+const c2Code = (p, t0) => codeBlock(p, C2_UNIFORM, 110, 150, t0, { first: 15, size: 20, w: 930, title: 'lab1_var21.py' });
+// Подсветка строк по очереди: каждая следующая гасит предыдущую.
+function c2Steps(cb, list) {
+  let prev = null;
+  list.forEach(([a, b, t]) => { if (prev) hide(prev, t, .3); prev = codeHl(cb, a, b, t); });
+}
+
+// Узлы сетки {a, b, n}: засечки на оси и (по желанию) точки на кривой, слева направо за dur секунд.
+function c2Nodes(Gr, { a, b, n }, t0, { dur = 1, color = COL.dim, r = 5, onCurve = true } = {}) {
+  const gg = G(Gr.top, { o: 0 });
+  let d = '';
+  for (let i = 0; i <= n; i++) d += `M${Gr.PX(a + (b - a) * i / n)} ${Gr.y0}v-12`;
+  mk('path', { d, stroke: color, 'stroke-width': 2 }, gg);
+  show(gg, t0);
+  if (onCurve) for (let i = 0; i <= n; i++) {
+    const x = a + (b - a) * i / n, c = mk('circle', { cx: Gr.PX(x), cy: Gr.PY(Gr.f(x)), r, fill: color }, Gr.top);
+    put(c, { o: 0 }); show(c, t0 + dur * i / n, .2);
+  }
+  return gg;
+}
+
+const BEATS = [
+  ['intro', 'Глава 2', (m, D) => introCard(m, D, 'ЛР1 · Глава 2', 'Метод\nравномерного поиска', 'сетка · функция uniform · результат · таблица 3 · вывод')],
+
+  ['grid', 'Сетка', (m) => {
+    const p = panel(0);
+    kick(p, '2.1 · Сетка с шагом h = ε');
+    const g = G1(p);
+    band(g, 1, 4, m('seg'));
+    c2Nodes(g, { a: 1, b: 4, n: 60 }, m('h'), { onCurve: false, color: COL.task });
+    texRows(p, [
+      'h=\\varepsilon=0{,}0005',
+      'N=\\dfrac{3}{0{,}0005}=6000\\ \\text{интервалов}',
+      'N+1=6001\\ \\text{узел}',
+      'x_i=1+i\\cdot h',
+    ], 1000, 160, [m('h'), m('n'), m('nodes'), m('xi')], { size: 36, dy: 110, color: [COL.task, COL.chalk, COL.chalk, COL.good] });
+    fdot(g, 1, m('ends'), { label: 'x₀ = 1', color: OC.x1 });
+    fdot(g, 4, m('ends') + .5, { label: 'x₆₀₀₀ = 4', color: OC.x2 });
+    tex(p, 'i=0,1,\\dots,6000', 1000, 600, m('ends'), { size: 32, color: COL.dim });
+    say(p, 'на доске — каждый сотый узел', 1000, 720, m('shown'), { size: 26, fill: COL.dim });
+  }],
+
+  ['scan', 'Значения в узлах', (m) => {
+    const p = panel(0);
+    kick(p, '2.2 · Функция в каждом узле, ответ — узел с минимумом');
+    const g = G1(p);
+    const R = runM('uniform', 'f1');
+    const t0 = m('each') + .4, t1 = m('ans') - .3, dt = (t1 - t0) / R.steps.length;
+    c2Nodes(g, R.steps[0].grid, t0, { dur: t1 - t0, r: 4 });
+    para(p, 'f считается в каждом узле, слева направо', 1000, 180, m('each'), { w: 540, size: 28 });
+    para(p, 'метод помнит узел с наименьшим значением', 1000, 285, m('best'), { w: 540, size: 28, fill: OC.best });
+    let bestX = null, bestDot = null;
+    R.steps.forEach((s, k) => {
+      const t = t0 + k * dt, last = k === R.steps.length - 1;
+      const cur = s.pts.find(q => q.c === 'q') || s.pts[0];
+      const d = fdot(g, cur.x, undefined, { color: OC.u, r: 10, drop: true });
+      show(d, t, .05); if (!last) hide(d, t + dt, .05);
+      if (s.row[3] !== bestX) {
+        if (bestDot) hide(bestDot, t, .05);
+        bestX = s.row[3];
+        bestDot = fdot(g, bestX, undefined, { color: OC.best, r: 14, drop: false });
+        show(bestDot, t, .05);
+      }
+      const tt = say(p, `i = ${s.k}`, 1000, 400, t, { size: 30, fill: OC.u, font: MONO, dur: .05 });
+      const tb = say(p, `лучший x = ${fm(s.row[3], 4)}`, 1000, 450, t, { size: 30, fill: OC.best, font: MONO, dur: .05 });
+      if (!last) { hide(tt, t + dt, .05); hide(tb, t + dt, .05); }
+    });
+    say(p, 'после 2 функция растёт — лучший узел стоит', 1000, 530, m('pass'), { size: 25, fill: COL.dim });
+    tex(p, '\\text{ответ: } x=2{,}000000', 1000, 600, m('ans'), { size: 38, color: COL.good });
+  }],
+
+  ['err', 'Ошибка и пассивность', (m) => {
+    const p = panel(0);
+    kick(p, '2.3 · Ошибка не больше h; метод пассивный');
+    const X = [160, 480, 800, 1120, 1440], XS = 928, AX = 680;
+    const Y = x => 620 - .0005 * (x - XS) ** 2;
+    const lbl = ['x_{j-2}', 'x_{j-1}', 'x_j', 'x_{j+1}', 'x_{j+2}'];
+    const base = G(p, { o: 0 });
+    mk('path', { d: `M100 ${AX}H1500`, stroke: COL.chalk, 'stroke-width': 3 }, base);
+    let d = ''; for (let x = 120; x <= 1480; x += 10) d += (x === 120 ? 'M' : 'L') + x + ' ' + Y(x).toFixed(1);
+    mk('path', { d, stroke: COL.chalk, 'stroke-width': 4, fill: 'none', opacity: .55 }, base);
+    show(base, m('zoom'));
+    X.forEach((x, i) => {
+      const gg = G(p, { o: 0 }), best = i === 2, c = best ? OC.best : COL.whole;
+      mk('path', { d: `M${x} ${Y(x)}V${AX}`, stroke: c, 'stroke-width': 2, 'stroke-dasharray': '6 6', opacity: .7 }, gg);
+      mk('circle', { cx: x, cy: Y(x), r: best ? 14 : 10, fill: c, stroke: COL.board, 'stroke-width': 3 }, gg);
+      mk('path', { d: `M${x} ${AX - 12}V${AX + 12}`, stroke: c, 'stroke-width': 3 }, gg);
+      show(gg, m('zoom') + .3 + i * .15);
+      tex(p, lbl[i], x, AX + 14, m('zoom') + .3 + i * .15, { size: 30, anchor: 'middle', w: 200, color: c });
+    });
+    const zone = mk('rect', { x: 480, y: 215, width: 640, height: AX - 215, fill: COL.task, 'fill-opacity': .12, stroke: COL.task, 'stroke-width': 2, 'stroke-dasharray': '10 8' }, p);
+    put(zone, { o: 0 }); show(zone, m('nb'));
+    p.insertBefore(zone, p.firstChild);
+    say(p, 'минимум где-то здесь', 800, 250, m('nb') + .3, { size: 26, fill: COL.task, anchor: 'middle', weight: 600 });
+    const xs = G(p, { o: 0 });
+    mk('path', { d: `M${XS} 330V${AX}`, stroke: OC.u, 'stroke-width': 3, 'stroke-dasharray': '4 8' }, xs);
+    T(xs, 'x*', { x: XS + 14, y: 360, size: 26, fill: OC.u, font: MATH, weight: 600 });
+    show(xs, m('nb') + .8);
+    arrowTo(p, 790, 305, 490, 305, COL.task, m('bound'));
+    arrowTo(p, 810, 305, 1110, 305, COL.task, m('bound'));
+    say(p, 'h', 640, 295, m('bound') + .3, { size: 30, fill: COL.task, anchor: 'middle', weight: 700 });
+    say(p, 'h', 960, 295, m('bound') + .3, { size: 30, fill: COL.task, anchor: 'middle', weight: 700 });
+    tex(p, '|x^*-x_j|\\le h', 800, 140, m('bound') + .5, { size: 40, anchor: 'middle', w: 600, color: COL.task });
+    para(p, 'Пассивный: все узлы известны заранее и не зависят от полученных значений f.', 120, 800, m('pas'), { w: 900, size: 27 });
+    tag(p, 'итерация = вычисление', 1300, 812, COL.good, m('it'), { size: 28, solid: true });
+  }],
+
+  ['q1', 'Проверка: сетка', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    texRows(p, ['h=\\varepsilon', 'N=\\dfrac{b-a}{h}', '\\text{узлов}=N+1', 'x_i=a+i\\cdot h'], 120, 180, [.3, .5, .7, .9], { size: 44, dy: 130 });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-grid', prompt: ['ЛР1, отрезок [1; 4], но ε = 0,001. Сколько интервалов, сколько узлов и где узел с номером i = 1000?'],
+    build: numIn([{ parts: ['N = ', { num: 3000, tol: 0, d: 0, w: 7 }], why: 'N = 3/0,001 = 3000.' },
+      { parts: ['узлов = ', { num: 3001, tol: 0, d: 0, w: 7 }], why: 'N + 1 = 3001 — как в таблице 3 при ε = 0,001.' },
+      { parts: ['x₁₀₀₀ = ', { num: 2, tol: 1e-6, d: 3, w: 7 }], why: 'x = 1 + 1000·0,001 = 2.' }]),
+  }, {
+    id: 'c-node', prompt: ['При h = 0,0005 какой номер у узла x = 2,5?'],
+    build: numIn([{ parts: ['i = ', { num: 3000, tol: 0, d: 0, w: 7 }], why: '(2,5 − 1)/0,0005 = 3000.' }]),
+  }], done) }],
+
+  ['code1', 'uniform: подготовка', (m) => {
+    const p = panel(0);
+    kick(p, '2.4 · Функция uniform: подготовка');
+    const cb = c2Code(p, .3);
+    c2Steps(cb, [[15, 17, m('sig')], [18, 18, m('n')], [19, 19, m('h')], [20, 20, m('start')], [21, 21, m('fa')], [22, 22, m('cnt')]]);
+    const X = 1070;
+    tex(p, 'a=1,\\ b=4,\\ \\varepsilon=0{,}0005', X, 150, m('sig') + .3, { size: 28, w: 480 });
+    tex(p, 'n=\\mathrm{round}(3/0{,}0005)=6000', X, 230, m('n') + .3, { size: 28, w: 480 });
+    para(p, 'range() нужно целое; 0.3 / 0.1 в Python = 2.9999999999999996', X, 300, m('n') + 4, { w: 470, size: 22, fill: COL.dim });
+    tex(p, 'h=3/6000=0{,}0005', X, 380, m('h') + .3, { size: 28, w: 480 });
+    tex(p, 'x_{best}=a=1', X, 460, m('start') + .3, { size: 28, w: 480, color: OC.best });
+    tex(p, 'f_{best}=f(1)=1', X, 530, m('fa') + .3, { size: 28, w: 480, color: OC.best });
+    tag(p, 'cnt = 1 — первое вычисление', 1300, 640, COL.task, m('cnt') + .3, { size: 26, solid: true });
+  }],
+
+  ['code2', 'uniform: цикл', (m) => {
+    const p = panel(0);
+    kick(p, '2.5 · Функция uniform: цикл по узлам и ответ');
+    const cb = c2Code(p, .3);
+    c2Steps(cb, [[23, 23, m('loop')], [24, 24, m('x')], [25, 25, m('fx')], [26, 26, m('c')], [27, 29, m('if')], [30, 30, m('ret')]]);
+    const X = 1070;
+    tex(p, 'i=1,\\,2,\\,\\dots,\\,n', X, 150, m('loop') + .3, { size: 28, w: 480 });
+    tex(p, 'x_i=a+i\\cdot h', X, 220, m('x') + .3, { size: 28, w: 480, color: COL.good });
+    say(p, 'fx = f(x)', X, 330, m('fx') + .3, { size: 26, font: MONO });
+    say(p, 'cnt += 1', X + 230, 330, m('c') + .3, { size: 26, font: MONO, fill: COL.task });
+    para(p, 'fx < f_best: строгое «<», при равенстве остаётся левый узел', X, 390, m('if') + .5, { w: 470, size: 24 });
+    tex(p, '(x_{best},\\ f_{best},\\ n+1,\\ cnt)', X, 490, m('ret') + .3, { size: 28, w: 480 });
+    tex(p, 'cnt=1+n=6001=n+1', X, 570, m('eq') + .5, { size: 28, w: 480, color: COL.good });
+    tag(p, 'итерация = одно вычисление', 1300, 680, COL.good, m('eq') + 1.5, { size: 26, solid: true });
+  }],
+
+  ['q2', 'Проверка: код', (m) => {
+    const p = panel(0); kick(p, 'Проверка');
+    codeBlock(p, C2_UNIFORM.slice(2), 60, 150, .3, { first: 17, size: 17, w: 880 });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-run', prompt: ['Что вернёт uniform(1, 4, 1) для f(x) = x − 2ln(x)? (f(1) = 1, f(2) ≈ 0,6137, f(3) ≈ 0,8028, f(4) ≈ 1,2274)'],
+    build: numIn([{ parts: ['n = ', { num: 3, tol: 0, d: 0, w: 5 }], why: 'n = round(3/1) = 3, h = 1.' },
+      { parts: ['x_best = ', { num: 2, tol: 1e-6, d: 1, w: 6 }], why: 'Узлы 1, 2, 3, 4; наименьшее f в узле 2.' },
+      { parts: ['cnt = ', { num: 4, tol: 0, d: 0, w: 5 }], why: 'Одно вычисление до цикла и три в цикле: 4 = n + 1.' }]),
+  }, {
+    id: 'c-tie', prompt: ['В двух узлах значения f оказались одинаковыми и наименьшими. Какой узел вернёт uniform?'],
+    build: choice(['Левый — тот, что встретился раньше', 'Правый — последний', 'Середину между ними', 'Функция выдаст ошибку'], 0,
+      'Условие fx < f_best строгое: равное значение не заменяет найденный узел.',
+      [null, 'Для замены нужно строго меньше, а значения равны.', 'Ответ всегда один из узлов сетки.', 'Равенство — обычный случай, ошибки нет.']),
+  }], done) }],
+
+  ['result', 'Результат', (m) => {
+    const p = panel(0);
+    kick(p, '2.6 · Результат: x = 2,000000 — точно случайно');
+    tex(p, 'f(x)=0{,}6137056389\\ \\ \\text{в узле}\\ \\ x=2{,}000000', 120, 150, m('val'), { size: 42 });
+    tag(p, '= 2 − 2ln2, эталон гл. 1', 1250, 290, COL.good, m('exact'), { size: 26 });
+    say(p, 'точный — случайно', 120, 300, m('luck'), { size: 32, fill: COL.bad, weight: 700 });
+    const lo = 1997, hi = 2003, X0 = 200, X1 = 1400, PX = i => X0 + (i - lo) / (hi - lo) * (X1 - X0), AX = 500;
+    const ax = G(p, { o: 0 });
+    mk('path', { d: `M140 ${AX}H1460`, stroke: COL.chalk, 'stroke-width': 3 }, ax);
+    for (let i = lo; i <= hi; i++) {
+      const best = i === 2000, c = best ? OC.best : COL.whole;
+      mk('circle', { cx: PX(i), cy: AX, r: best ? 15 : 9, fill: c, stroke: COL.board, 'stroke-width': 3 }, ax);
+      T(ax, 'i = ' + i, { x: PX(i), y: AX + 48, size: 22, fill: c, anchor: 'middle', font: MONO });
+      T(ax, fm(1 + i * .0005, 4), { x: PX(i), y: AX - 30, size: 22, fill: COL.dim, anchor: 'middle', font: MONO });
+    }
+    show(ax, m('node') - .5);
+    const xs = G(p, { o: 0 });
+    mk('path', { d: `M${PX(2000)} ${AX - 110}V${AX - 50}`, stroke: OC.best, 'stroke-width': 3 }, xs);
+    T(xs, 'x* = 2', { x: PX(2000), y: AX - 124, size: 28, fill: OC.best, anchor: 'middle', font: MATH, weight: 600 });
+    show(xs, m('node') + .5);
+    tex(p, '1+2000\\cdot 0{,}0005=2', 800, 590, m('node') + 1, { size: 40, anchor: 'middle', w: 800, color: OC.best });
+    const gx = G(p, { o: 0 }), XG = PX(2001.4);
+    mk('path', { d: `M${XG} ${AX - 80}V${AX + 6}`, stroke: OC.u, 'stroke-width': 3, 'stroke-dasharray': '4 7' }, gx);
+    T(gx, 'в общем случае', { x: XG + 12, y: AX - 84, size: 22, fill: OC.u });
+    show(gx, m('gen'));
+    para(p, 'В общем случае минимум лёг бы между узлами, и погрешность была бы до h = 0,0005.', 120, 720, m('gen') + .4, { w: 1000, size: 28, fill: OC.u });
+    tag(p, '6001 вычисление f', 1330, 740, COL.task, m('cost'), { size: 30, solid: true });
+  }],
+
+  ['eps', 'Таблица 3', (m) => {
+    const p = panel(0);
+    kick(p, '2.7 · Таблица 3: число вычислений растёт как 1/ε');
+    const rows = [['0,1', '31'], ['0,01', '301'], ['0,001', '3001'], ['0,0005', '6001'], ['0,0001', '30001'], ['0,00001', '300001']];
+    const tb = table(p, { x: 120, y: 170, cols: [['ε', 260], ['равномерный поиск', 380]], rh: 74, size: 34, t0: m('t1') - .4, mono: [0, 1] });
+    rows.forEach((r, i) => tb.row(r, m('t' + (i + 1))));
+    tb.hl(3, COL.task, m('t4') + .2);
+    say(p, 'ваш расчёт', 790, tb.rowY(3) + 50, m('t4') + .4, { size: 26, fill: COL.task, weight: 600 });
+    tag(p, 'ε : 2 ⇒ × 2', 880, tb.rowY(3) - 8, COL.whole, m('ten') - 4, { size: 22 });
+    tex(p, 'N+1=\\dfrac{b-a}{\\varepsilon}+1=\\dfrac{3}{\\varepsilon}+1', 1000, 230, m('why'), { size: 40, w: 560 });
+    tag(p, 'ε : 10  ⇒  вычислений × 10', 1270, 420, COL.bad, m('ten'), { size: 30, solid: true });
+    tex(p, '\\sim\\dfrac{1}{\\varepsilon}', 1270, 480, m('ten') + .6, { size: 48, anchor: 'middle', w: 400, color: COL.bad });
+  }],
+
+  ['concl', 'Вывод', (m) => {
+    const p = panel(0);
+    kick(p, '2.8 · Вывод отчёта о равномерном поиске');
+    const L = [['+', 'Реализуется проще всех: сетка, один цикл, сравнение', COL.good, 'simple'],
+      ['−', 'Потребовал 6001 вычисление; число растёт обратно пропорционально точности', COL.bad, 'many'],
+      ['−', 'Для точных вычислений невыгоден', COL.bad, 'bad'],
+      ['+', 'Годится, когда f не унимодальна и нужно сначала грубо найти область минимума', COL.good, 'good']];
+    L.forEach(([s, str, c, k], i) => {
+      tag(p, s, 130, 200 + i * 120, c, m(k), { size: 34, solid: true });
+      para(p, str, 190, 212 + i * 120, m(k) + .2, { w: 1300, size: 32, fill: COL.chalk });
+    });
+    para(p, 'Гл. 3: золотое сечение — та же точность гораздо дешевле, за счёт отбрасывания частей отрезка.', 130, 730, m('bridge'), { w: 1360, size: 28, fill: COL.dim });
+  }],
+
+  ['q3', 'Проверка: верно ли', () => { const p = panel(0); kick(p, 'Проверка'); }, { ask: done => quiz(WIDE, [{
+    id: 'c-tf', prompt: ['Верно или неверно?'],
+    build: TFQ([
+      ['x = 2,000000 точен, потому что равномерный поиск всегда находит минимум точно', false, 'Случайно: 2 = 1 + 2000·0,0005 — узел сетки. В общем случае погрешность до h.'],
+      ['При ε = 0,0001 программа делает 30001 вычисление функции', true, '3/0,0001 + 1 = 30001 — таблица 3.'],
+      ['Уменьшение ε в 10 раз увеличивает число вычислений тоже примерно в 10 раз', true, 'Рост как 1/ε.'],
+      ['У равномерного поиска одна итерация — это одно вычисление функции', true, 'Метод пассивный: каждый шаг — следующий узел.'],
+      ['Для точных вычислений равномерный поиск выгоден', false, 'Невыгоден: 6001 вычисление уже при ε = 0,0005.'],
+    ]),
+  }], done) }],
+
+  ['sum', 'Главное', (m) => {
+    const p = panel(0);
+    wrapList(p, [['Сетка h = ε = 0,0005: 6000 интервалов, 6001 узел xᵢ = 1 + i·h. Ответ — узел с минимумом f, ошибка ≤ h.', 'w1'],
+      ['Метод пассивный ⇒ итерация = вычисление. uniform возвращает n + 1 и cnt — оба 6001.', 'w2'],
+      ['Результат: x = 2,000000, f = 0,6137056389 — точно случайно: 1 + 2000·0,0005 = 2.', 'w3'],
+      ['Вычислений 3/ε + 1, рост как 1/ε. Прост, но для точных расчётов невыгоден; годится для грубого поиска области минимума.', 'w4']], m, { size: 30, dy: 150 });
+  }],
+
+  ['final1', 'Практика 1', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-grid', prompt: ['ЛР1 с другой точностью: f(x) = x − 2ln(x), [1; 4], ε = 0,0004, сетка h = ε как в отчёте. Сколько интервалов, сколько вычислений насчитает uniform и какой номер у узла x = 2?'],
+    build: numIn([{ parts: ['N = ', { num: 7500, tol: 0, d: 0, w: 8 }], why: 'N = 3/0,0004 = 7500.' },
+      { parts: ['cnt = ', { num: 7501, tol: 0, d: 0, w: 8 }], why: 'N + 1 = 7501.' },
+      { parts: ['i = ', { num: 2500, tol: 0, d: 0, w: 8 }], why: '(2 − 1)/0,0004 = 2500 — двойка снова узел сетки.' }]),
+  }], done, 'Практика главы   1 из 3') }],
+
+  ['final2', 'Практика 2', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-trace', prompt: ['Прогоните uniform(0, 2, 0.5) для f(x) = (x − 1,2)². Что вернёт функция и чему равна ошибка |x_best − x*|?'],
+    build: numIn([{ parts: ['x_best = ', { num: 1, tol: 1e-6, d: 1, w: 7 }], why: 'Узлы 0; 0,5; 1; 1,5; 2. Значения 1,44; 0,49; 0,04; 0,09; 0,64 — меньше всего в 1.' },
+      { parts: ['f_best = ', { num: 0.04, tol: 1e-6, d: 2, w: 7 }], why: 'f(1) = (−0,2)² = 0,04.' },
+      { parts: ['cnt = ', { num: 5, tol: 0, d: 0, w: 5 }], why: 'n = 4, cnt = n + 1 = 5.' },
+      { parts: ['|x_best − x*| = ', { num: 0.2, tol: 1e-6, d: 1, w: 7 }], why: '|1 − 1,2| = 0,2 ≤ h = 0,5.' }]),
+  }], done, 'Практика главы   2 из 3') }],
+
+  ['final3', 'Практика 3', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-eps', prompt: ['Продолжите столбец таблицы 3 (отрезок [1; 4]): сколько вычислений сделает равномерный поиск?'],
+    build: numIn([{ parts: ['ε = 0,05:  ', { num: 61, tol: 0, d: 0, w: 9 }], why: '3/0,05 + 1 = 61.' },
+      { parts: ['ε = 0,000001:  ', { num: 3000001, tol: 0, d: 0, w: 9 }], why: '3/0,000001 + 1 = 3 000 001 — в 10 раз больше, чем при 0,00001.' }]),
+  }, {
+    id: 'p-when', prompt: ['Когда, по выводу отчёта, равномерный поиск уместен?'],
+    build: choice(['Функция не унимодальна, и нужно сначала грубо найти область минимума', 'Нужна высокая точность при малом числе вычислений', 'Функция гладкая и выпуклая, нужен самый быстрый метод', 'Число итераций должно быть меньше числа вычислений'], 0,
+      'Он не выбрасывает части отрезка, а смотрит во все узлы.',
+      [null, 'Наоборот: для точных вычислений он невыгоден.', 'Для такой функции в ЛР1 лучше всех метод Брента.', 'У равномерного поиска они всегда равны.']),
+  }], done, 'Практика главы   3 из 3') }],
+
+  ['finish', 'Финиш', () => { panel(0); }, { ask: finishCard }],
+].map(([id, title, run, extra]) => ({ id, title, run, ...extra }));
+
+boot();
+</script>
+</body>
+</html>

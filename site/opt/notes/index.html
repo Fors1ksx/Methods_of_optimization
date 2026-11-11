@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Конспекты</title>
+<link rel="stylesheet" href="../lib/pages.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/extras.css">
+<style>
+@media print { .top, .notes-toc, .acts { display: none !important; } body { background: #fff; color: #000; } body::before { display: none; } .box, table.t th { background: #f4f4f4 !important; } .page h3 { color: #234; } }
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<main class="page">
+  <p class="kicker">Теория</p>
+  <h1>Конспекты <i>глав</i></h1>
+  <p class="lede">Всё главное из каждой главы: определения, формулы, алгоритмы, разбор ваших лабораторных и «частые ошибки». Можно распечатать или сохранить в PDF (Ctrl+P).</p>
+  <nav class="notes-toc" id="toc"></nav>
+  <div id="body"></div>
+</main>
+<script src="../lib/pages.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/book.js"></script>
+<script src="../lib/notes-data.js"></script>
+<script>
+'use strict';
+const EMBED = new URLSearchParams(location.search).has('embed');
+if (EMBED) { document.getElementById('top').remove(); document.querySelector('.page').style.paddingTop = '8px'; addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'g' || e.key === 'G' || e.code === 'KeyG') parent.postMessage({ glossary: 'close' }, '*'); }); addEventListener('message', e => { if (e.data?.glossary === 'focus') window.focus(); }); }
+else topBar('notes');
+const id = n => 'ch' + String(n).padStart(2, '0');
+$('toc').innerHTML = NOTES.map(c => `<a href="#${id(c.n)}">${c.n}. ${c.t}</a>`).join('');
+$('body').innerHTML = NOTES.map(c => `<section class="note-ch" id="${id(c.n)}"><p class="k">Глава ${c.n}</p><h2>${c.t}</h2>${richHTML(c.html)}
+  <div class="acts" style="display:flex;gap:8px;margin-top:14px"><a class="btn quiet sm" href="../${id(c.n)}/">▶ Урок главы</a><a class="btn quiet sm" href="../trainer/">Тренажёр</a></div></section>`).join('');
+if (EMBED) { const b = el('button', 'btn quiet sm', '✕ Закрыть конспект (Esc)'); b.style.cssText = 'position:fixed;top:10px;right:14px;z-index:9'; b.onclick = () => parent.postMessage({ glossary: 'close' }, '*'); document.body.append(b); }
+if (location.hash) setTimeout(() => document.querySelector(location.hash)?.scrollIntoView(), 50);
+</script>
+</body>
+</html>

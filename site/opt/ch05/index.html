@@ -1,0 +1,502 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ЛР1: результаты, сравнение и выводы</title>
+<link rel="stylesheet" href="../lib/engine.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/opt.css">
+<link rel="expect" href="#bar" blocking="render">
+</head>
+<body>
+<script src="../lib/engine.js"></script>
+<script src="../lib/math.js"></script>
+<script src="../lib/board.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/opt.js"></script>
+<script src="audio/ru/timings.js"></script>
+<script>
+'use strict';
+const CHAPTER = { number: 5, title: 'ЛР1: результаты, сравнение и выводы', minutes: 12, language: 'ru', next: '../ch06/' };
+// Глава строго по отчёту ЛР1: §3 (GenAI), §7 (программа целиком), §8 (результаты), §9 (таблицы 2 и 3 и их анализ), §10 (выводы).
+const f = OPT.FN.f1.f;
+// Листинг из отчёта = lab1_var21.py, строки 1–168.
+const LAB = `import math
+
+# вариант 21: f(x) = x - 2ln(x), отрезок [1, 4], точность 0.0005
+a0 = 1.0
+b0 = 4.0
+eps = 0.0005
+
+k = (math.sqrt(5) - 1) / 2   # золотое число, ~0.618
+
+
+def f(x):
+    return x - 2 * math.log(x)
+
+
+# ---------- метод 1: равномерный поиск ----------
+# просто идём по сетке с шагом eps и запоминаем, где f меньше всего
+def uniform(a, b, eps):
+    n = round((b - a) / eps)      # сколько шагов
+    h = (b - a) / n
+    x_best = a
+    f_best = f(a)
+    cnt = 1                       # счётчик вычислений f
+    for i in range(1, n + 1):
+        x = a + i * h
+        fx = f(x)
+        cnt += 1
+        if fx < f_best:
+            x_best = x
+            f_best = fx
+    return x_best, f_best, n + 1, cnt   # тут итерация = одно вычисление
+
+
+# ---------- метод 2: золотое сечение ----------
+def golden(a, b, eps):
+    x1 = b - k * (b - a)          # левая точка (38.2% от a)
+    x2 = a + k * (b - a)          # правая точка (61.8% от a)
+    f1 = f(x1)
+    f2 = f(x2)
+    cnt = 2
+    it = 0
+    while True:
+        it += 1
+        if f1 <= f2:
+            # справа от x2 минимума нет -> выкидываем [x2, b]
+            b = x2
+            # старая x1 как раз оказывается на месте новой x2, f не пересчитываем
+            x2 = x1
+            f2 = f1
+            if b - a <= eps:
+                break
+            x1 = b - k * (b - a)
+            f1 = f(x1)
+        else:
+            # слева от x1 минимума нет -> выкидываем [a, x1]
+            a = x1
+            x1 = x2
+            f1 = f2
+            if b - a <= eps:
+                break
+            x2 = a + k * (b - a)
+            f2 = f(x2)
+        cnt += 1
+    x = (a + b) / 2               # ответ - середина того, что осталось
+    cnt += 1
+    return x, f(x), it, cnt
+
+
+# ---------- метод 3: Брент ----------
+# x - лучшая точка, w - вторая, v - третья (прошлая w)
+# пробуем прыгнуть в вершину параболы через x, w, v,
+# если не получается - делаем шаг золотого сечения
+def brent(a, b, eps, log=None):
+    tol = eps / 2
+    x = w = v = a + (1 - k) * (b - a)
+    fx = fw = fv = f(x)
+    cnt = 1
+    it = 0
+    d = b - a        # последний шаг
+    e = b - a        # предпоследний шаг
+    while x - a > eps or b - x > eps:
+        it += 1
+        e_old = e
+        e = d
+        use_parabola = False
+
+        # параболу можно строить только по трём разным точкам
+        if x != w and w != v and x != v:
+            r = (x - w) * (fx - fv)
+            q = (x - v) * (fx - fw)
+            p = (x - v) * q - (x - w) * r
+            q = 2 * (q - r)
+            if q > 0:
+                p = -p
+            q = abs(q)
+            # вершина параболы = x + p/q
+            # берём её, только если шаг меньше половины позапрошлого
+            # и точка не вылезла за отрезок / не прилипла к краю
+            if q != 0 and abs(p) < abs(q * e_old / 2):
+                u = x + p / q
+                if u - a > 2 * tol and b - u > 2 * tol:
+                    d = p / q
+                    use_parabola = True
+
+        if not use_parabola:
+            # шаг золотого сечения в бОльшую половину
+            if x < (a + b) / 2:
+                e = b - x
+            else:
+                e = a - x
+            d = (1 - k) * e
+
+        # совсем маленький шаг смысла не имеет, делаем хотя бы tol
+        if abs(d) >= tol:
+            u = x + d
+        elif d > 0:
+            u = x + tol
+        else:
+            u = x - tol
+
+        fu = f(u)
+        cnt += 1
+        if log is not None:
+            log.append((it, a, b, x, u, fu, "парабола" if use_parabola else "золотое"))
+
+        # сужаем отрезок и обновляем x, w, v
+        if fu <= fx:
+            # нашли точку лучше x
+            if u < x:
+                b = x
+            else:
+                a = x
+            v, fv = w, fw
+            w, fw = x, fx
+            x, fx = u, fu
+        else:
+            # u хуже x, но отрезок всё равно можно подрезать
+            if u < x:
+                a = u
+            else:
+                b = u
+            if fu <= fw or w == x:
+                v, fv = w, fw
+                w, fw = u, fu
+            elif fu <= fv or v == x or v == w:
+                v, fv = u, fu
+    return x, fx, it, cnt
+
+
+# ---------- запуск ----------
+print("точное решение: x = 2, f =", 2 - 2 * math.log(2))
+print()
+
+names = ["равномерный поиск", "золотое сечение", "Брент"]
+funcs = [uniform, golden, brent]
+
+for name, method in zip(names, funcs):
+    x, fx, it, cnt = method(a0, b0, eps)
+    print(f"{name:18} итераций: {it:5}  вычислений: {cnt:5}  x = {x:.6f}  f = {fx:.10f}")
+
+print("\\nитерации Брента:")
+log = []
+brent(a0, b0, eps, log)
+for row in log:
+    print("%2d  a=%.6f  b=%.6f  x=%.6f  u=%.6f  f(u)=%.8f  %s" % row)
+
+print("\\nсколько раз считали f при разных eps:")
+for e in [0.1, 0.01, 0.001, 0.0005, 0.0001, 0.00001]:
+    print(e, [method(a0, b0, e)[3] for method in funcs])`.split('\n');
+const labL = (from, to) => LAB.slice(from - 1, to);
+// Таблица 2 и таблица 3 отчёта — числа ровно как в отчёте.
+const T2 = [['Метод равномерного поиска', '6001', '6001', '2,000000', '0,6137056389'], ['Метод золотого сечения', '19', '21', '2,000028', '0,6137056391'], ['Метод Брента', '8', '9', '1,999967', '0,6137056392']];
+const T3 = [['0,1', 31, 10, 7], ['0,01', 301, 14, 10], ['0,001', 3001, 19, 10], ['0,0005', 6001, 21, 9], ['0,0001', 30001, 24, 13], ['0,00001', 300001, 29, 16]];
+const T3E = [0.1, 0.01, 0.001, 0.0005, 0.0001, 0.00001];
+const C5 = { uni: COL.whole, gold: COL.task, br: COL.good };
+// Вывод программы (python lab1_var21.py) — строки ровно как печатает программа.
+const OUT = {
+  exact: ['точное решение: x = 2, f = 0.6137056388801094'],
+  t2: ['равномерный поиск  итераций:  6001  вычислений:  6001  x = 2.000000  f = 0.6137056389',
+    'золотое сечение    итераций:    19  вычислений:    21  x = 2.000028  f = 0.6137056391',
+    'Брент              итераций:     8  вычислений:     9  x = 1.999967  f = 0.6137056392'],
+  t1: ['итерации Брента:',
+    ' 1  a=1.000000  b=4.000000  x=2.145898  u=2.854102  f(u)=0.75658747  золотое',
+    ' 2  a=1.000000  b=2.854102  x=2.145898  u=1.708204  f(u)=0.63731896  золотое',
+    ' 3  a=1.708204  b=2.854102  x=2.145898  u=2.029464  f(u)=0.61392057  парабола',
+    ' 4  a=1.708204  b=2.145898  x=2.029464  u=2.007940  f(u)=0.61372136  парабола',
+    ' 5  a=1.708204  b=2.029464  x=2.007940  u=1.999056  f(u)=0.61370586  парабола',
+    ' 6  a=1.708204  b=2.007940  x=1.999056  u=1.999967  f(u)=0.61370564  парабола',
+    ' 7  a=1.999056  b=2.007940  x=1.999967  u=2.000217  f(u)=0.61370565  парабола',
+    ' 8  a=1.999056  b=2.000217  x=1.999967  u=1.999619  f(u)=0.61370568  золотое'],
+  t3: ['сколько раз считали f при разных eps:', '0.1 [31, 10, 7]', '0.01 [301, 14, 10]', '0.001 [3001, 19, 10]', '0.0005 [6001, 21, 9]', '0.0001 [30001, 24, 13]', '1e-05 [300001, 29, 16]'],
+};
+// Карточка с рамкой и заголовком.
+function c5card(p, x, y, w, h, head, color, t0, { size = 30 } = {}) {
+  const b = boxR(p, x, y, w, h, { stroke: color, fill: mix(COL.board, color, .07), rx: 18 }); show(b, t0);
+  say(p, head, x + 28, y + 50, t0 + .1, { size, fill: color, weight: 700 });
+  return b;
+}
+// Подсветка строк + пояснение справа (как в главах 3–4).
+function c5walk(p, cb, { x = 1090, y = 200, w = 450 } = {}) {
+  let prev = [];
+  return (from, to, t, txt, col = COL.task) => {
+    prev.forEach(e => hide(e, t, .3));
+    prev = [codeHl(cb, from, to, t, { color: col }), para(p, txt, x, y, t + .2, { w, size: 26 })];
+    return prev;
+  };
+}
+
+const BEATS = [
+  ['intro', 'Глава 5', (m, D) => introCard(m, D, 'ЛР1 · Глава 5', 'Результаты, сравнение и выводы', 'GenAI · программа целиком · таблицы 2 и 3 · выводы')],
+
+  ['genai', 'Раздел 3: GenAI', (m) => {
+    const p = panel(0);
+    kick(p, '5.1 · Раздел 3 отчёта: использование систем генеративного ИИ');
+    c5card(p, 96, 130, 660, 520, 'Система GenAI', COL.whole, m('sys'));
+    say(p, 'Claude Opus 5.5 (Anthropic), claude.ai', 124, 230, m('sys') + .4, { size: 26, fill: COL.chalk, weight: 600 });
+    say(p, 'для чего применялась:', 124, 300, m('ai'), { size: 24, fill: COL.dim });
+    ['помощь в написании программы на Python', 'построение графика функции', 'составление таблиц по результатам', 'оформление отчёта'].forEach((s, i) =>
+      item(p, i + 1, s, 370 + i * 66, m('ai') + 2 + i * 2.1, { x: 110, size: 26, color: COL.whole }));
+    c5card(p, 820, 130, 690, 520, 'Сделано вами самостоятельно', COL.good, m('me'));
+    ['сверка алгоритмов с лекциями', 'вывод аналитического решения', 'ручная проверка первых итераций', 'запуск программы при разных ε', 'формулировка выводов'].forEach((s, i) =>
+      item(p, i + 1, s, 240 + i * 74, m('m' + (i + 1)), { x: 836, size: 27, color: COL.good }));
+    say(p, 'ручная проверка — итерация 1 золотого сечения:', 96, 720, m('check'), { size: 26, fill: COL.dim });
+    tex(p, 'f(2{,}145898)=0{,}619\\ \\le\\ f(2{,}854102)=0{,}757\\ \\Rightarrow\\ [1;\\ 2{,}854102]', 96, 750, m('check') + 4, { size: 34, color: COL.good });
+  }],
+
+  ['prog', 'Раздел 7: структура программы', (m) => {
+    const p = panel(0);
+    kick(p, '5.2 · Раздел 7: программа целиком');
+    const cb = codeBlock(p, labL(1, 12), 110, 150, .2, { size: 19, first: 1, w: 800 });
+    codeHl(cb, 3, 8, m('head'), { color: COL.whole });
+    codeHl(cb, 11, 12, m('f'), { color: COL.good });
+    tag(p, 'методы вызывают только f(x)', 510, 600, COL.good, m('f') + 1.5, { size: 24 });
+    const FNS = [['uniform(a, b, eps)', 'строки 17–30', C5.uni], ['golden(a, b, eps)', 'строки 34–65', C5.gold], ['brent(a, b, eps, log=None)', 'строки 72–146', C5.br]];
+    FNS.forEach(([nm, ln, c], i) => {
+      const y = 150 + i * 150, t0 = m('three') + i * 1.2;
+      show(boxR(p, 980, y, 560, 120, { stroke: c, fill: mix(COL.board, c, .08) }), t0);
+      say(p, nm, 1004, y + 46, t0 + .1, { size: 25, fill: c, weight: 600, font: MONO });
+      say(p, ln, 1516, y + 94, t0 + .2, { size: 20, fill: COL.dim, anchor: 'end' });
+      say(p, '→ return x, f, it, cnt', 1004, y + 94, m('ret') + i * .3, { size: 23, fill: COL.chalk, font: MONO });
+    });
+    tag(p, '(ответ, значение, итерации, вычисления)', 1260, 625, COL.chalk, m('ret') + 1.5, { size: 22 });
+    show(boxR(p, 980, 680, 560, 100, { stroke: COL.dim, dash: '8 6' }), m('run'));
+    say(p, 'запуск: строки 149–168', 1004, 722, m('run') + .1, { size: 25, fill: COL.chalk, weight: 600 });
+    say(p, '→ печатает таблицы 1, 2, 3 отчёта', 1004, 760, m('run') + .4, { size: 22, fill: COL.dim });
+  }],
+
+  ['cnt', 'Счётчики вычислений', (m) => {
+    const p = panel(0);
+    kick(p, '5.3 · Каждый метод сам считает вычисления функции');
+    const GR = [
+      ['uniform', C5.uni, 'uni', [[21, 22], [25, 26], [30, 30]], 'cnt = 1 + n = 6001\\quad it = n+1', 8],
+      ['golden', C5.gold, 'gold', [[37, 39], [62, 62], [64, 65]], 'cnt = 2 + 18 + 1 = 21\\quad it = 19', 15.5],
+      ['brent', C5.br, 'br', [[75, 76], [120, 121], [146, 146]], 'cnt = 1 + 8 = 9\\quad it = 8', 6],
+    ];
+    let y = 150;
+    GR.forEach(([nm, c, mk5, frs, res, dl]) => {
+      const t0 = m(mk5), y0 = y;
+      say(p, nm, 110, y + 6, .3, { size: 24, fill: c, weight: 700, font: MONO });
+      y += 18;
+      frs.forEach(([a, b]) => {
+        const cb = codeBlock(p, labL(a, b), 120, y, .3, { size: 18, first: a, w: 850 });
+        codeHl(cb, a, b, t0, { color: c });
+        y += (b - a + 1) * cb.dy + 14;
+      });
+      tex(p, res, 1010, y0 + 20, t0 + dl, { size: 30, color: c, w: 560 });
+      y += 22;
+    });
+    tag(p, 'f(x) в return golden учтено строкой cnt += 1 выше', 1270, 470, C5.gold, m('gold') + 9.5, { size: 20 });
+    tag(p, 'числа таблиц = вызовы f', 1270, 800, COL.chalk, m('same'), { size: 26, solid: true });
+  }],
+
+  ['run', 'Запуск', (m) => {
+    const p = panel(0);
+    kick(p, '5.4 · Блок запуска: одна программа — три таблицы отчёта');
+    const cb = codeBlock(p, labL(149, 168), 110, 120, .2, { size: 17, first: 149, w: 960 });
+    const tm = term(p, { x: 110, y: 640, w: 1430, h: 240, title: 'вывод программы', size: 17 });
+    show(tm.g, .3);
+    const R = [[150, 151, 'exact', 'точное решение x = 2', COL.dim], [153, 158, 't2', '→ таблица 2', COL.task], [160, 164, 't1', '→ таблица 1', OC.par], [166, 168, 't3', '→ таблица 3', COL.good]];
+    R.forEach(([a, b, k, lab, c]) => {
+      const t0 = m(k);
+      codeHl(cb, a, b, t0, { color: c });
+      const tg = tag(p, lab, 1240, cb.y + (a - 149 + (b - a + 1) / 2) * cb.dy, c, t0 + .3, { size: 26, solid: k !== 'exact' });
+      if (k === 'exact') hide(tg, m('all'), .3);
+      tm.outs(OUT[k], t0 + .6, { color: k === 'exact' ? COL.dim : COL.chalk }, k === 't1' ? .35 : .25);
+      if (k !== 't3') tm.gap();
+    });
+    tag(p, 'все три таблицы — из этого вывода', 1310, 190, COL.chalk, m('all') + .3, { size: 22 });
+  }],
+
+  ['q1', 'Проверка: что возвращают функции', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    codeBlock(p, labL(153, 158), 110, 200, .3, { size: 15, first: 153, w: 860 });
+    codeBlock(p, labL(17, 30), 110, 420, .4, { size: 17, first: 17, w: 860 });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-tuple', prompt: ['Что вернёт golden(1.0, 4.0, 0.0005)?'],
+    build: choice(['(2,000028; 0,6137056391; 19; 21)', '(2,000028; 0,6137056391; 21; 19)', '(1,999868; 2,000189; 19; 21)', '(2,000028; 0,6137056391; 19; 19)'], 0,
+      'Порядок: x, f(x), итерации, вычисления — строка таблицы 2.',
+      [null, 'Сначала итерации (it), потом вычисления (cnt).', 'Это концы итогового отрезка, а функция возвращает его середину.', 'Вычислений больше итераций: 2 стартовых + 18 + 1 = 21.']),
+  }, {
+    id: 'c-uni01', prompt: ['Что вернёт uniform(1.0, 4.0, 0.1) в двух последних полях?'],
+    build: numIn([{ parts: ['it = ', { num: 31, tol: 0, d: 0, w: 6 }], why: 'n = round(3/0,1) = 30, it = n + 1 = 31.' }, { parts: ['cnt = ', { num: 31, tol: 0, d: 0, w: 6 }], why: 'cnt = 1 + 30 = 31 — как в таблице 3.' }]),
+  }], done) }],
+
+  ['res', 'Раздел 8: результаты', (m) => {
+    const p = panel(0);
+    kick(p, '5.5 · Раздел 8: три ответа под лупой около x* = 2');
+    const lo = 1.9994, hi = 2.0006, X0 = 150, W = 1300, PX = v => X0 + (v - lo) / (hi - lo) * W, YT = 150, YB = 740;
+    const bandE = mk('rect', { x: PX(1.9995), y: YT, width: PX(2.0005) - PX(1.9995), height: YB - YT, fill: COL.good, 'fill-opacity': .1 }, p);
+    put(bandE, { o: 0 }); show(bandE, m('band'));
+    say(p, 'x* ± ε', PX(2.0005) - 12, YT + 34, m('band') + .3, { size: 24, fill: COL.good, anchor: 'end', weight: 600 });
+    const ax = G(p, { o: 0 });
+    path(ax, `M${X0} ${YB}H${X0 + W}`, { stroke: COL.chalk, 'stroke-width': 3 });
+    for (let i = 0; i <= 6; i++) { const v = lo + i * .0002, X = PX(v); mk('path', { d: `M${X} ${YB - 8}V${YB + 8}`, stroke: COL.chalk, 'stroke-width': 2 }, ax); T(ax, v.toFixed(4).replace('.', ','), { x: X, y: YB + 36, size: 20, fill: COL.dim, anchor: 'middle', font: MATH }); }
+    show(ax, .3);
+    const xs = G(p, { o: 0 }); mk('path', { d: `M${PX(2)} ${YT}V${YB}`, stroke: COL.chalk, 'stroke-width': 2, 'stroke-dasharray': '4 8' }, xs); show(xs, .5);
+    const row = (y, lab, c, t0) => { say(p, lab, X0, y - 46, t0, { size: 25, fill: c, weight: 700 }); const l = path(p, `M${X0} ${y}H${X0 + W}`, { stroke: COL.faint, 'stroke-width': 2 }, { o: 0 }); show(l, t0); };
+    const dot = (x, y, c, lab, t0) => { const g = G(p, { o: 0 }); mk('circle', { cx: PX(x), cy: y, r: 11, fill: c, stroke: COL.board, 'stroke-width': 3 }, g); T(g, lab, { x: PX(x), y: y - 22, size: 24, fill: c, anchor: 'middle', weight: 700, font: MATH }); show(g, t0, .35); };
+    const seg = (a, b, y, c, t0) => { const l = path(p, `M${PX(a)} ${y}H${PX(b)}`, { stroke: c, 'stroke-width': 9, 'stroke-linecap': 'round', 'stroke-opacity': .55 }, { d: 0 }); draw(l, t0, .6); };
+    // равномерный поиск: узлы сетки с шагом h = 0,0005
+    const yU = 270, yG = 450, yB = 630;
+    row(yU, 'равномерный поиск', C5.uni, m('uni'));
+    [1.9995, 2, 2.0005].forEach((v, i) => { const t = path(p, `M${PX(v)} ${yU - 14}V${yU + 14}`, { stroke: C5.uni, 'stroke-width': 3 }, { o: 0 }); show(t, m('uni') + .4 + i * .15); });
+    dot(2, yU, C5.uni, '2,000000', m('uni') + 1);
+    say(p, 'узлы через h = 0,0005: 2 = 1 + 2000·0,0005 — совпадение; в общем случае ошибка до h', X0, yU + 50, m('uni') + 5.4, { size: 21, fill: COL.dim });
+    row(yG, 'золотое сечение', C5.gold, m('gold'));
+    seg(1.999868, 2.000189, yG, C5.gold, m('gold') + .5);
+    dot(2.000028, yG, C5.gold, '2,000028', m('gold') + 7.7);
+    say(p, '19 итераций: [1,999868; 2,000189], длина 0,000321 < ε; ответ — середина', X0, yG + 50, m('gold') + 1, { size: 21, fill: COL.dim });
+    row(yB, 'метод Брента', C5.br, m('br'));
+    seg(1.999619, 2.000217, yB, C5.br, m('br') + .5);
+    dot(1.999967, yB, C5.br, '1,999967', m('br') + 8);
+    say(p, 'итоговый отрезок [1,999619; 2,000217]; ответ — лучшая точка x', X0, yB + 50, m('br') + 1, { size: 21, fill: COL.dim });
+    tag(p, 'все три ответа — в пределах ε от x* = 2', 800, 840, COL.good, m('all'), { size: 26, solid: true });
+  }],
+
+  ['tbl2', 'Таблица 2', (m) => {
+    const p = panel(0);
+    kick(p, '5.6 · Таблица 2: сравнение методов при ε = 0,0005');
+    const tb = table(p, { x: 96, y: 130, cols: [['Метод', 400], ['Итераций', 170], ['Вычислений', 200], ['x', 180], ['f(x)', 230]], rh: 56, size: 27, t0: m('rows'), mono: [1, 2, 3, 4] });
+    T2.forEach((r, i) => tb.row(r, m('rows') + .2 + i * 5.2));
+    halo(p, tb.xs[4] - 2, tb.rowY(0) + 2, tb.xs[5] - tb.xs[4] + 4, tb.rowY(3) - tb.rowY(0), COL.task, m('fcol'));
+    tex(p, 'f(x)-f^*\\approx\\tfrac12 f\'\'(2)\\,(x-2)^2=0{,}25\\cdot(3\\cdot10^{-5})^2\\approx 2\\cdot10^{-10}', 96, 350, m('fcol') + 7.6, { size: 30, color: COL.task });
+    // столбики вычислений: сначала обычная шкала, потом логарифмическая
+    const BX = 420, BW = 1000, rowsB = [['равномерный', 6001, C5.uni], ['золотое', 21, C5.gold], ['Брент', 9, C5.br]];
+    const lin = v => v / 6001 * BW, lg = v => Math.log10(v) / 4 * BW;
+    const axL = G(p, { o: 0 }), axG = G(p, { o: 0 }), YA = 790;
+    path(axL, `M${BX} ${YA}H${BX + BW}`, { stroke: COL.chalk, 'stroke-width': 2 }); path(axG, `M${BX} ${YA}H${BX + BW}`, { stroke: COL.chalk, 'stroke-width': 2 });
+    [0, 2000, 4000, 6000].forEach(v => T(axL, String(v), { x: BX + lin(v), y: YA + 30, size: 20, fill: COL.dim, anchor: 'middle', font: MATH }));
+    ['1', '10', '100', '1000', '10 000'].forEach((s, i) => { T(axG, s, { x: BX + i * BW / 4, y: YA + 30, size: 20, fill: COL.dim, anchor: 'middle', font: MATH }); mk('path', { d: `M${BX + i * BW / 4} ${YA - 300}V${YA}`, stroke: COL.chalk, 'stroke-opacity': .12, 'stroke-width': 1.5 }, axG); });
+    const lnLab = say(p, 'обычная шкала', BX + BW, YA + 60, m('lin'), { size: 20, fill: COL.dim, anchor: 'end' }); hide(lnLab, m('log'), .3);
+    show(axL, m('lin')); hide(axL, m('log'), .4); show(axG, m('log') + .2);
+    const lgLab = say(p, 'логарифмическая шкала', BX + BW, YA + 60, m('log') + .2, { size: 20, fill: COL.task, anchor: 'end' });
+    rowsB.forEach(([nm, v, c], i) => {
+      const y = 520 + i * 86;
+      say(p, nm, 96, y + 10, m('lin'), { size: 27, fill: c, weight: 600 });
+      const r = mk('rect', { x: BX, y: y - 24, width: Math.max(2, lin(v)), height: 48, rx: 6, fill: c, 'fill-opacity': .8 }, p);
+      put(r, { o: 0 }); show(r, m('lin') + .3 + i * .2);
+      tw(r, { a_width: lg(v) }, m('log') + .3, .9);
+      const lab = G(p, { x: BX + Math.max(2, lin(v)) + 14, y: y + 10, o: 0 }); T(lab, String(v), { size: 27, fill: COL.chalk, weight: 700, font: MATH }); show(lab, m('lin') + .5 + i * .2);
+      tw(lab, { x: BX + lg(v) + 14 }, m('log') + .3, .9);
+    });
+    tag(p, '6001 / 21 ≈ 286', 1120, 606, C5.gold, m('ratio'), { size: 24, solid: true });
+    tag(p, '21 / 9 ≈ 2,3', 1120, 692, C5.br, m('ratio') + 4, { size: 24, solid: true });
+  }],
+
+  ['tbl3', 'Таблица 3', (m) => {
+    const p = panel(0);
+    kick(p, '5.7 · Таблица 3: число вычислений функции при разных ε');
+    const tb = table(p, { x: 96, y: 130, cols: [['ε', 150], ['Равномерный', 180], ['Золотое', 130], ['Брент', 110], ['З / Б', 110]], rh: 56, size: 25, t0: m('rows'), mono: [0, 1, 2, 3] });
+    T3.forEach((r, i) => tb.row([r[0], { t: String(r[1]), c: C5.uni }, { t: String(r[2]), c: C5.gold }, { t: String(r[3]), c: C5.br }, ''], m('rows') + .4 + i * .3));
+    T3.forEach((r, i) => say(p, fm(r[2] / r[3], 1), tb.xs[4] + 14, tb.rowY(i) + 56 * .66, m('ratio') + 4 + i * 1.6, { size: 25, fill: COL.chalk, font: MONO }));
+    // график: обе оси логарифмические
+    const X0 = 880, Y0 = 760, W = 620, H = 540, PX = e => X0 + 40 + (Math.log10(1 / e) - 1) / 4 * (W - 60), PY = v => Y0 - Math.log10(v) / 6 * H;
+    const ax = G(p, { o: 0 });
+    for (let k = 0; k <= 6; k++) { mk('path', { d: `M${X0} ${PY(10 ** k)}H${X0 + W}`, stroke: COL.chalk, 'stroke-opacity': .1, 'stroke-width': 1.5 }, ax); T(ax, k === 0 ? '1' : k === 1 ? '10' : '10' + '⁰¹²³⁴⁵⁶'[k], { x: X0 - 12, y: PY(10 ** k) + 7, size: 20, fill: COL.dim, anchor: 'end', font: MATH }); }
+    [0.1, 0.01, 0.001, 0.0001, 0.00001].forEach(e => { mk('path', { d: `M${PX(e)} ${Y0}V${Y0 - H}`, stroke: COL.chalk, 'stroke-opacity': .1, 'stroke-width': 1.5 }, ax); T(ax, String(e).replace('.', ',').replace('1e-5', '0,00001'), { x: PX(e), y: Y0 + 30, size: 19, fill: COL.dim, anchor: 'middle', font: MATH }); });
+    path(ax, `M${X0} ${Y0 - H - 10}V${Y0}H${X0 + W + 10}`, { stroke: COL.chalk, 'stroke-width': 3 });
+    T(ax, 'вычислений', { x: X0 - 10, y: Y0 - H - 24, size: 20, fill: COL.dim });
+    T(ax, 'ε → точнее', { x: X0 + W, y: Y0 + 62, size: 20, fill: COL.dim, anchor: 'end' });
+    show(ax, m('chart'));
+    const line = (j, c, t0, above) => {
+      const d = T3E.map((e, i) => `${i ? 'L' : 'M'}${PX(e).toFixed(1)} ${PY(T3[i][j]).toFixed(1)}`).join('');
+      draw(path(p, d, { stroke: c, 'stroke-width': 4 }, { d: 0 }), t0, 1);
+      T3E.forEach((e, i) => {
+        const g = G(p, { o: 0 }); mk('circle', { cx: PX(e), cy: PY(T3[i][j]), r: 7, fill: c }, g);
+        if (i !== 3) T(g, String(T3[i][j]), { x: PX(e) + (j === 1 ? -8 : 0), y: PY(T3[i][j]) + (above ? -14 : 30), size: 19, fill: c, anchor: j === 1 ? 'end' : 'middle', font: MATH, weight: 600 });
+        show(g, t0 + .2 + i * .15);
+      });
+    };
+    line(1, C5.uni, m('uni'), true);
+    line(2, C5.gold, m('gold'), true);
+    line(3, C5.br, m('br'), false);
+    tex(p, '\\text{равномерный: } N=3/\\varepsilon+1,\\ \\ \\varepsilon:10\\Rightarrow\\times10', 96, 560, m('uni') + 1, { size: 27, color: C5.uni, w: 760 });
+    tex(p, '\\text{золотое: } \\approx +5 \\text{ на каждое } \\varepsilon:10', 96, 620, m('gold') + 1, { size: 27, color: C5.gold, w: 760 });
+    tex(p, '0{,}618^{5}\\approx 0{,}09\\approx\\tfrac{1}{10}', 96, 680, m('why'), { size: 27, color: C5.gold, w: 760 });
+    tag(p, 'Брент в 1,4–2,3 раза меньше золотого', 470, 790, C5.br, m('ratio') + 12.9, { size: 25, solid: true });
+    // 9 < 10: при ε = 0,0005 у Брента вычислений меньше, чем при ε = 0,001
+    halo(p, tb.xs[3] - 4, tb.rowY(2) + 2, tb.xs[4] - tb.xs[3] + 8, 2 * 56 - 4, COL.bad, m('odd'));
+    const z = G(p, { o: 0 }); mk('circle', { cx: (PX(0.001) + PX(0.0005)) / 2, cy: PY(9.5), r: 46, fill: 'none', stroke: COL.bad, 'stroke-width': 3, 'stroke-dasharray': '8 6' }, z);
+    T(z, '10 → 9', { x: (PX(0.001) + PX(0.0005)) / 2, y: PY(9.5) + 82, size: 22, fill: COL.bad, anchor: 'middle', weight: 700 }); show(z, m('odd') + .5);
+    tag(p, '9 < 10 — не ошибка: от ε зависит tol', 470, 850, COL.bad, m('odd') + 6, { size: 23 });
+  }],
+
+  ['q2', 'Проверка: таблицы', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    const tb = table(p, { x: 110, y: 170, cols: [['ε', 170], ['Равномерный', 210], ['Золотое', 160], ['Брент', 140]], rh: 60, size: 27, t0: .3, mono: [0, 1, 2, 3] });
+    T3.forEach((r, i) => tb.row(r.map(String), .4 + i * .1));
+  }, { ask: done => quiz(QR, [{
+    id: 'c-ratio', prompt: ['Таблица 3: во сколько раз Брент экономнее золотого сечения при ε = 0,00001?'],
+    build: numIn([{ parts: ['отношение = ', { num: 29 / 16, tol: .01, d: 2 }], why: '29 / 16 ≈ 1,81 — внутри диапазона 1,4–2,3 из отчёта.' }]),
+  }, {
+    id: 'c-uni6', prompt: ['Сколько вычислений сделала бы uniform на [1; 4] при ε = 0,000001?'],
+    build: numIn([{ parts: ['cnt = ', { num: 3000001, tol: 0, d: 0, w: 10 }], why: 'n = 3/0,000001 = 3 000 000 узловых шагов, cnt = n + 1 = 3 000 001: рост как 1/ε.' }]),
+  }], done) }],
+
+  ['concl', 'Раздел 10: выводы', (m) => {
+    const p = panel(0);
+    kick(p, '5.8 · Раздел 10 отчёта: четыре вывода');
+    const C = [
+      [96, 130, '1 · Точка минимума', COL.chalk, 'c1', 'Аналитически x* = 2, f(x*) = 2 − 2ln2 ≈ 0,613706. Все три метода получили её с точностью не хуже ε = 0,0005.'],
+      [814, 130, '2 · Равномерный поиск', C5.uni, 'c2', 'Проще всех, но 6001 вычисление, и это число растёт обратно пропорционально точности. Для точных расчётов невыгоден, зато годится, когда функция не унимодальна и нужно грубо найти область минимума.'],
+      [96, 500, '3 · Золотое сечение', C5.gold, 'c3', 'Повторное использование одной из точек — 21 вычисление. Плюс — гарантированная скорость: число итераций известно до начала расчёта и не зависит от вида функции.'],
+      [814, 500, '4 · Метод Брента', C5.br, 'c4', 'Лучший результат: 8 итераций и 9 вычислений. Парабола хорошо приближает гладкую выпуклую x − 2ln(x) около минимума — большинство шагов параболические; шаги золотого сечения страхуют от расходимости.'],
+    ];
+    C.forEach(([x, y, h, c, k, s]) => { c5card(p, x, y, 690, 340, h, c, m(k)); para(p, s, x + 28, y + 108, m(k) + .4, { w: 636, size: 25 }); });
+  }],
+
+  ['sum', 'Главное', (m) => {
+    const p = panel(0);
+    wrapList(p, [['Программа: f и три метода; каждый сам считает вычисления и возвращает (x, f, it, cnt).', 'w1'],
+      ['Таблица 2 (ε = 0,0005): 6001 → 21 → 9 вычислений; x = 2,000000; 2,000028; 1,999967.', 'w2'],
+      ['Таблица 3: равномерный ∝ 1/ε; золотое ≈ +5 на порядок; Брент в 1,4–2,3 раза меньше золотого.', 'w3'],
+      ['GenAI: код, график, таблицы, оформление. Ваше: аналитика, ручная проверка, запуски при разных ε, выводы.', 'w4']], m, { size: 30, dy: 150 });
+  }],
+
+  ['final1', 'Практика 1', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-read', prompt: ['Таблица 3 отчёта, вычислений (равномерный | золотое | Брент): ε = 0,001 → 3001 | 19 | 10; ε = 0,0005 → 6001 | 21 | 9; ε = 0,0001 → 30001 | 24 | 13. Посчитайте.'],
+    build: numIn([
+      { parts: ['равномерный, ε = 0,0001 к ε = 0,001: 30001 / 3001 = ', { num: 30001 / 3001, tol: .01, d: 2 }], why: '≈ 10: ε уменьшили в 10 раз — вычислений в 10 раз больше.' },
+      { parts: ['золотое, прирост с ε = 0,001 до ε = 0,0001: ', { num: 5, tol: 0, d: 0, w: 5 }], why: '24 − 19 = 5 — «примерно +5 на порядок».' },
+      { parts: ['золотое / Брент при ε = 0,0005: ', { num: 21 / 9, tol: .01, d: 2 }], why: '21 / 9 ≈ 2,33 — верхняя граница «1,4–2,3 раза».' },
+    ]),
+  }], done, 'Практика главы   1 из 3') }],
+
+  ['final2', 'Практика 2', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-run', prompt: ['Программу ЛР1 запустили при ε = 0,002 на [1; 4]. Что вернут uniform и golden? (golden: 3·0,618ⁿ ≤ ε, вычислений n + 2)'],
+    build: numIn([
+      { parts: ['uniform: cnt = ', { num: 1501, tol: 0, d: 0, w: 7 }], why: 'n = 3/0,002 = 1500, cnt = 1501.' },
+      { parts: ['golden: it = ', { num: 16, tol: 0, d: 0, w: 5 }], why: 'n ≥ ln(0,002/3)/ln 0,618 ≈ 15,2 ⇒ 16.' },
+      { parts: ['golden: cnt = ', { num: 18, tol: 0, d: 0, w: 5 }], why: '2 стартовых + 15 новых + 1 в середине = 18.' },
+    ]),
+  }], done, 'Практика главы   2 из 3') }],
+
+  ['final3', 'Практика 3', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-tf5', prompt: ['Объясните числа отчёта: верно или неверно?'],
+    build: TFQ([
+      ['Равномерный поиск дал x = 2,000000 точно, потому что 2 = 1 + 2000·0,0005 — узел сетки', true, 'Отчёт: результат точный случайно, в общем случае погрешность до h.'],
+      ['Золотое сечение при ε = 0,0005 вычисляет f 19 раз', false, '19 — итераций; вычислений 21 = 2 + 18 + 1.'],
+      ['У Брента 9 вычислений = 1 на старте + 8 итераций', true, 'cnt = 1, затем cnt += 1 в каждой итерации.'],
+      ['9 вычислений Брента при ε = 0,0005 и 10 при ε = 0,001 — ошибка программы', false, 'Не ошибка: от ε зависит tol и то, какие шаги параболические.'],
+      ['Число итераций золотого сечения известно до начала расчёта', true, 'Из 3·0,618ⁿ ≤ ε.'],
+      ['Равномерный поиск годится, чтобы грубо найти область минимума не унимодальной функции', true, 'Вывод 2 отчёта.'],
+    ]),
+  }, {
+    id: 'p-fcol', prompt: ['Почему значения f в таблице 2 совпадают до 9 знаков, хотя x отличаются уже в пятом?'],
+    build: choice(['Около минимума f − f* ≈ 0,25·(x − 2)²: отклонение 3·10⁻⁵ даёт лишь ≈ 2·10⁻¹⁰', 'Программа округляет f до 9 знаков', 'Все методы нашли одну и ту же точку', 'f(x) = x − 2ln x не зависит от x около 2'], 0,
+      'f′(2) = 0, f″(2) = 0,5: ошибка в f квадратична по ошибке в x.',
+      [null, 'Печатается 10 знаков, и они видны.', 'x разные: 2,000000; 2,000028; 1,999967.', 'Зависит, но около минимума очень слабо — квадратично.']),
+  }], done, 'Практика главы   3 из 3') }],
+
+  ['finish', 'Финиш', () => { panel(0); }, { ask: finishCard }],
+].map(([id, title, run, extra]) => ({ id, title, run, ...extra }));
+
+boot();
+</script>
+</body>
+</html>

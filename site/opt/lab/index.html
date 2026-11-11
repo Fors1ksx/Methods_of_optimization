@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Лаборатория методов</title>
+<link rel="stylesheet" href="../lib/pages.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/extras.css">
+</head>
+<body>
+<header class="top" id="top"></header>
+<main class="page">
+  <p class="kicker">Эксперименты</p>
+  <h1>Лаборатория <i>методов</i></h1>
+  <p class="lede">Методы ваших отчётов (и для сравнения — другие методы из заданий) на любой функции — по шагу, с графиком и таблицей. Для варианта 21 числа совпадают с вашими программами на Python: 6001 / 21 / 9 в ЛР1 и 22 / 9 в ЛР2.</p>
+  <div class="panel" style="padding:16px;border-radius:16px">
+    <div class="lab-ctl">
+      <label>Функция<select id="fn"></select></label>
+      <label id="customL" hidden>f(x) =<input id="custom" value="x - 2*ln(x)" style="width:230px" title="x^2, sin, cos, exp, ln, sqrt, atan, tg, ctg, arctg"></label>
+      <label>Метод<select id="m"></select></label>
+      <label>a<input id="a" class="num"></label>
+      <label>b<input id="b" class="num"></label>
+      <label>ε<input id="e" class="num"></label>
+      <button class="btn go sm" id="go">Запустить</button>
+    </div>
+  </div>
+  <div id="err"></div>
+  <div class="stats" id="stats"></div>
+  <div class="stage2"><div id="plot"></div>
+    <div class="vnote" id="note"></div>
+    <div class="prow" style="justify-content:center;padding:6px 0 4px">
+      <button class="btn quiet sm" id="b0">⏮</button><button class="btn quiet sm" id="bp">◀ шаг</button><button class="btn go sm" id="bn">шаг ▶</button><button class="btn quiet sm" id="be">⏭ до конца</button><button class="btn quiet sm" id="ba">▶ авто</button>
+      <label class="note" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="zoom"> зум на отрезок</label>
+      <span class="note" id="ctr"></span>
+    </div>
+    <div class="legend2" style="justify-content:center"><span><i style="background:var(--quiz)"></i>точки метода</span><span><i style="background:var(--task)"></i>новая точка / касательные</span><span><i style="background:var(--good)"></i>лучшая точка</span><span><i style="background:var(--cmd)"></i>парабола</span><span><i style="background:rgba(134,201,232,.4)"></i>текущий отрезок</span></div>
+  </div>
+  <h2>Таблица итераций</h2>
+  <div class="tscroll" id="tbl"></div>
+  <h2>Сравнение методов</h2>
+  <p class="lede">Все методы той же лабораторной на выбранной функции и точности.</p>
+  <button class="btn quiet sm" id="cmp">Сравнить</button>
+  <div class="tscroll" id="cmpBox" style="margin-top:10px"></div>
+  <h2>Исследование по ε</h2>
+  <p class="lede">Сколько вычислений нужно каждому методу при ε = 0,1 … 0,00001 — как таблица 3 в ваших отчётах.</p>
+  <button class="btn quiet sm" id="epsB">Построить</button>
+  <div class="tscroll" id="epsBox" style="margin-top:10px"></div>
+</main>
+<script src="../lib/pages.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/plot.js"></script>
+<script src="../lib/book.js"></script>
+<script>
+'use strict';
+topBar('lab');
+const { FN, METHODS, customFn } = OPT;
+const fnSel = $('fn'), mSel = $('m');
+fnSel.innerHTML = Object.entries(FN).map(([k, F]) => `<option value="${k}">${F.name}</option>`).join('') + '<option value="custom">Своя функция…</option>';
+const INREP = new Set(['uniform', 'golden', 'brentMin', 'tangents', 'brentRoot']);   // методы ваших отчётов
+mSel.innerHTML = '<optgroup label="Методы ваших отчётов">' + Object.entries(METHODS).filter(([k]) => INREP.has(k)).map(([k, M]) => `<option value="${k}">ЛР${M.lab} · ${M.name}</option>`).join('') + '</optgroup>'
+  + '<optgroup label="Для сравнения (нет в отчётах)">' + Object.entries(METHODS).filter(([k]) => !INREP.has(k)).map(([k, M]) => `<option value="${k}">ЛР${M.lab} · ${M.name}</option>`).join('') + '</optgroup>';
+const q = new URLSearchParams(location.search);
+if (q.get('m') && METHODS[q.get('m')]) mSel.value = q.get('m');
+if (q.get('f') && FN[q.get('f')]) fnSel.value = q.get('f');
+else if (METHODS[mSel.value].lab === 2) fnSel.value = 'phi2';
+const fmtN = (v, d = 6) => typeof v === 'number' ? (isFinite(v) ? (Number.isInteger(v) ? String(v) : v.toFixed(d)).replace('.', ',') : '—') : v;
+let F, R, k = 0, autoT = null;
+function defaults() {
+  const key = fnSel.value; $('customL').hidden = key !== 'custom';
+  if (key !== 'custom') { const G = FN[key]; $('a').value = G.a; $('b').value = G.b; $('e').value = G.eps; }
+}
+function getF() { return fnSel.value === 'custom' ? customFn($('custom').value) : FN[fnSel.value]; }
+function start() {
+  clearInterval(autoT); autoT = null; $('ba').textContent = '▶ авто'; $('err').innerHTML = ''; $('cmpBox').innerHTML = ''; $('epsBox').innerHTML = '';
+  try {
+    F = getF();
+    const a = parseNum($('a').value), b = parseNum($('b').value), eps = parseNum($('e').value);
+    if (!(b > a) || !(eps > 0)) throw new Error('нужно a < b и ε > 0');
+    const M = METHODS[mSel.value];
+    if (M.lab === 2 && fnSel.value === 'f2') throw new Error('методы ЛР2 минимизируют выпуклую функцию — выберите «φ = −5x²e^(−x/2)»');
+    R = M.run(F, a, b, eps); R.a0 = a; R.b0 = b;
+  } catch (e) { $('err').innerHTML = `<div class="fbk no" style="margin:12px 0">Ошибка: ${e.message}</div>`; return; }
+  $('tbl').innerHTML = `<table class="t"><tr>${R.cols.map(c => `<th>${c}</th>`).join('')}</tr>` + R.steps.map((s, j) => `<tr data-j="${j}" style="cursor:pointer">${s.row.map(v => `<td>${fmtN(v)}</td>`).join('')}</tr>`).join('') + '</table>';
+  $('tbl').querySelectorAll('tr[data-j]').forEach(tr => tr.onclick = () => go(+tr.dataset.j));
+  const st = [['итераций', R.iters], ['вычислений f / f′', R.evals], ['найденный x', fmtN(R.x)], ['f(x)', fmtN(R.fx, 10)]];
+  if (F.xs !== undefined) st.push(['|x − x*|', Math.abs(R.x - F.xs).toExponential(2).replace('.', ',')]);
+  $('stats').innerHTML = st.map(([l, v]) => `<div><b>${v}</b><span>${l}</span></div>`).join('');
+  go(0);
+}
+function go(j) {
+  if (!R) return;
+  k = Math.max(0, Math.min(j, R.steps.length - 1));
+  const s = R.steps[k], M = METHODS[mSel.value];
+  let x = [R.a0, R.b0];
+  if ($('zoom').checked) { const c = (s.a + s.b) / 2, w = Math.max((s.b - s.a) * 1.6, 1e-5); x = [c - w / 2, c + w / 2]; }
+  $('plot').innerHTML = '';
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); $('plot').append(svg);
+  PLOT.draw(svg, { f: F.f, x, name: F.name, seg: [s.a, s.b], pts: s.pts, tan: s.tan, par: s.par, grid: s.grid, chord: s.chord, df: M.lab === 2 ? F.df : null, dname: "φ′(x)" });
+  $('note').textContent = (s.k ? `Итерация ${s.k}: ` : 'Старт: ') + s.note;
+  $('ctr').textContent = `шаг ${k} / ${R.steps.length - 1}`;
+  $('tbl').querySelectorAll('tr[data-j]').forEach(tr => tr.classList.toggle('cur', +tr.dataset.j === k));
+  const row = $('tbl').querySelector(`tr[data-j="${k}"]`); if (row) row.scrollIntoView({ block: 'nearest' });
+}
+$('b0').onclick = () => go(0); $('bp').onclick = () => go(k - 1); $('bn').onclick = () => go(k + 1); $('be').onclick = () => go(R.steps.length - 1);
+$('zoom').onchange = () => go(k);
+$('ba').onclick = () => {
+  if (autoT) { clearInterval(autoT); autoT = null; $('ba').textContent = '▶ авто'; return; }
+  $('ba').textContent = '❚❚ стоп';
+  autoT = setInterval(() => { if (k >= R.steps.length - 1) { clearInterval(autoT); autoT = null; $('ba').textContent = '▶ авто'; return; } go(k + 1); }, 900);
+};
+fnSel.onchange = () => { defaults(); start(); };
+mSel.onchange = () => { if (METHODS[mSel.value].lab === 2 && fnSel.value === 'f2') { fnSel.value = 'phi2'; defaults(); } start(); };
+$('go').onclick = start;
+addEventListener('keydown', e => { if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return; if (e.key === 'ArrowRight') go(k + 1); if (e.key === 'ArrowLeft') go(k - 1); });
+$('cmp').onclick = () => {
+  const lab = METHODS[mSel.value].lab, a = parseNum($('a').value), b = parseNum($('b').value), e = parseNum($('e').value);
+  const rows = Object.values(METHODS).filter(M => M.lab === lab).map(M => {
+    try { const r = M.run(F, a, b, e); return [M.name, r.iters, r.evals, fmtN(r.x), fmtN(r.fx, 8), F.xs !== undefined ? Math.abs(r.x - F.xs).toExponential(2).replace('.', ',') : '—']; }
+    catch (err) { return [M.name, '—', '—', err.message, '', '']; }
+  });
+  $('cmpBox').innerHTML = `<table class="t"><tr>${['Метод', 'Итераций', 'Вычислений', 'x', 'f(x)', '|x − x*|'].map(c => `<th>${c}</th>`).join('')}</tr>${rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+};
+$('epsB').onclick = () => {
+  const lab = METHODS[mSel.value].lab, a = parseNum($('a').value), b = parseNum($('b').value);
+  const ms = Object.values(METHODS).filter(M => M.lab === lab && !(M.run === METHODS.uniform.run && false));
+  const E = [0.1, 0.01, 0.001, 0.0005, 0.0001, 0.00001];
+  const cell = (M, e) => { if (M.name === 'Равномерный поиск' && (b - a) / e > 400000) return '>' + Math.round((b - a) / e); try { return M.run(F, a, b, e).evals; } catch (err) { return '—'; } };
+  $('epsBox').innerHTML = `<table class="t"><tr><th>ε</th>${ms.map(M => `<th>${M.name}</th>`).join('')}</tr>${E.map(e => `<tr><td>${String(e).replace('.', ',')}</td>${ms.map(M => `<td>${cell(M, e)}</td>`).join('')}</tr>`).join('')}</table>`;
+};
+defaults(); start();
+</script>
+</body>
+</html>

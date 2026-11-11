@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Метод касательных</title>
+<link rel="stylesheet" href="../lib/engine.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/opt.css">
+<link rel="expect" href="#bar" blocking="render">
+</head>
+<body>
+<script src="../lib/engine.js"></script>
+<script src="../lib/math.js"></script>
+<script src="../lib/board.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/opt.js"></script>
+<script src="audio/ru/timings.js"></script>
+<script>
+'use strict';
+const CHAPTER = { number: 7, title: 'Метод касательных', minutes: 10, language: 'ru', next: '../ch08/' };
+const P2 = OPT.FN.phi2, phi = P2.f, dphi = P2.df;
+// График φ варианта 21 с запасом снизу под пересечение касательных.
+const GT = (p, o = {}) => graph(p, 'phi2', { x0: 120, y0: 790, w: 720, h: 520, xs: [2, 6, .5], ys: [-13, -7, 1], yl: 'φ(x)', ...o });
+// Прогон tangents() из листинга (совпадает с таблицей 1 отчёта).
+const CH7_R = runM('tangents', 'phi2'), CH7_S = CH7_R.steps.slice(1);
+// Точка пересечения касательных в a и b.
+const ch7C = (a, b) => (phi(b) - phi(a) + a * dphi(a) - b * dphi(b)) / (dphi(a) - dphi(b));
+// Число со знаком, как в таблице отчёта: +0,473132.
+const ch7F = v => v.toFixed(6).replace('.', ',').replace('-', '−');
+const ch7Sg = v => (v > 0 ? '+' : '') + ch7F(v);
+// Ломаная по точкам [[x, y], ...] на графике.
+function ch7Poly(Gr, pts, t0, { color = COL.good, sw = 5, dash = '' } = {}) {
+  const d = pts.map(([x, y], i) => (i ? 'L' : 'M') + Gr.PX(x) + ' ' + Gr.PY(y)).join('');
+  const l = path(Gr.layer, d, { stroke: color, 'stroke-width': sw, ...(dash ? { 'stroke-dasharray': dash } : {}) }, dash ? { o: 0 } : { d: 0 });
+  dash ? show(l, t0) : draw(l, t0, .7);
+  return l;
+}
+// Функция tangents из листинга отчёта, строки 22–46.
+const CH7_CODE = [
+  '# метод 3: касательных ',
+  '# в концах отрезка строим касательные к phi, т.к. phi выпуклая,',
+  '# они лежат ниже графика; их пересечение c - новая пробная точка',
+  'def tangents(a, b, eps, log=None):',
+  '    fa, da = phi(a), dphi(a)',
+  '    fb, db = phi(b), dphi(b)',
+  "    cnt = 4                       # счётчик вычислений phi и phi'",
+  '    it = 0',
+  '    while True:',
+  '        it += 1',
+  '        # точка пересечения касательных в a и в b',
+  '        c = (fb - fa + da * a - db * b) / (da - db)',
+  '        fc, dc = phi(c), dphi(c)',
+  '        cnt += 2',
+  '        if log is not None:',
+  '            log.append((it, a, b, c, fc, dc))',
+  '        if abs(dc) <= eps or b - a <= eps:',
+  '            break',
+  '        if dc > 0:',
+  '            # функция растёт в c -> минимум левее, выкидываем [c, b]',
+  '            b, fb, db = c, fc, dc',
+  '        else:',
+  '            # функция убывает в c -> минимум правее, выкидываем [a, c]',
+  '            a, fa, da = c, fc, dc',
+  '    return c, -fc, it, cnt',
+];
+const ch7Code = (p, t0) => codeBlock(p, CH7_CODE, 110, 125, t0, { first: 22, w: 880, size: 20 });
+// Подсветка строк по очереди: каждая гаснет, когда загорается следующая.
+function ch7Steps(cb, list) {
+  list.forEach(([a, b, t], i) => { const r = codeHl(cb, a, b, t); if (list[i + 1]) hide(r, list[i + 1][2], .3); });
+}
+
+const BEATS = [
+  ['intro', 'Глава 7', (m, D) => introCard(m, D, 'ЛР2 · Глава 7', 'Метод касательных', 'касательные к φ в концах · точка c · 9 итераций · 22 вычисления')],
+
+  ['idea', 'Идея', (m) => {
+    const p = panel(0);
+    kick(p, '7.1 · Касательные к выпуклой φ лежат не выше графика');
+    const g = GT(p, { name: '\\varphi(x)' });
+    const c = ch7C(2, 6), yc = phi(2) + dphi(2) * (c - 2);
+    const t1 = tangent(g, 3.3, m('convex'), { color: COL.dim }), d1 = fdot(g, 3.3, m('convex'), { color: COL.dim, drop: false, r: 9 });
+    hide(t1, m('ta'), .3); hide(d1, m('ta'), .3);
+    tangent(g, 2, m('ta')); fdot(g, 2, m('ta'), { color: OC.x1, label: 'a' });
+    tangent(g, 6, m('tb')); fdot(g, 6, m('tb'), { color: OC.x1, label: 'b' });
+    fdot(g, c, m('cross'), { color: COL.bad, y: yc, label: 'c', r: 11 });
+    ch7Poly(g, [[2, phi(2)], [c, yc], [6, phi(6)]], m('low'), { color: COL.good, sw: 6 });
+    const X = 900;
+    say(p, 'касательная не выше графика', X, 185, m('convex'), { size: 28, fill: COL.dim, weight: 600 });
+    tex(p, "y=\\varphi(a)+\\varphi'(a)(x-a)", X, 225, m('ta'), { size: 34, color: OC.tan });
+    tex(p, "y=\\varphi(b)+\\varphi'(b)(x-b)", X, 300, m('tb'), { size: 34, color: OC.tan });
+    para(p, 'Точка пересечения c — новая пробная точка.', X, 430, m('cross'), { w: 620, size: 28, fill: COL.bad, weight: 600 });
+    para(p, 'Ломаная из двух касательных всюду не выше φ; её самая низкая точка — c.', X, 540, m('low'), { w: 620, size: 28, fill: COL.good });
+  }],
+
+  ['formula', 'Формула точки c', (m) => {
+    const p = panel(0);
+    kick(p, '7.2 · Точка пересечения касательных');
+    tex(p, "\\varphi(a)+\\varphi'(a)(c-a)=\\varphi(b)+\\varphi'(b)(c-b)", 120, 160, m('eq'), { size: 40 });
+    tex(p, "c=\\dfrac{\\varphi(b)-\\varphi(a)+a\\varphi'(a)-b\\varphi'(b)}{\\varphi'(a)-\\varphi'(b)}", 120, 270, m('sol'), { size: 48, color: COL.task });
+    const tb = table(p, { x: 120, y: 520, cols: [['x', 120], ['φ(x)', 230], ['φ′(x)', 230]], rh: 60, size: 30, t0: m('first'), mono: [0, 1, 2] });
+    [2, 6].forEach((x, i) => tb.row([String(x), ch7F(phi(x)), ch7F(dphi(x))], m('first') + .6 + i * .5));
+    const r6 = v => +v.toFixed(6), c = ch7C(2, 6);
+    const num = r6(phi(6)) - r6(phi(2)) + 2 * r6(dphi(2)) - 6 * r6(dphi(6)), den = r6(dphi(2)) - r6(dphi(6));
+    tex(p, `c_1=\\dfrac{${fm(num, 6)}}{${fm(den, 6)}}`.replace(/−/g, '-'), 860, 520, m('c1'), { size: 40 });
+    tex(p, 'c_1\\approx' + fm(c, 6), 860, 660, m('c1') + 1, { size: 52, color: OC.u });
+    tag(p, 'строка 1 таблицы 1', 1340, 840, COL.dim, m('c1') + 1.5, { size: 24 });
+  }],
+
+  ['inside', 'c внутри и выбор конца', (m) => {
+    const p = panel(0);
+    kick(p, '7.3 · c всегда внутри [a; b]; знак φ′(c) решает, какой конец заменить');
+    const g = GT(p);
+    const c = ch7C(2, 6), yc = phi(2) + dphi(2) * (c - 2);
+    const B = band(g, 2, 6, m('signs'));
+    tangent(g, 2, m('signs')); tangent(g, 6, m('signs') + .4);
+    fdot(g, 2, m('signs'), { color: OC.x1, label: 'a' }); fdot(g, 6, m('signs') + .4, { color: OC.x1, label: 'b' });
+    fdot(g, c, m('meet'), { color: COL.bad, y: yc, label: '', drop: false, r: 10 });
+    fdot(g, c, m('calc'), { color: OC.u, label: 'c' });
+    fval(g, c, 'φ′(c) = −0,819', m('calc') + .6, { color: OC.u, dy: -26, dx: 14 });
+    cut(g, 2, c, m('neg') + .8);
+    moveBand(g, B, c, 6, m('neg') + .8);
+    const X = 900;
+    tex(p, "\\varphi'(a)<0<\\varphi'(b)", X, 160, m('signs'), { size: 40 });
+    para(p, 'Левая касательная идёт вниз, правая вверх, обе под графиком → пересекаются между a и b.', X, 275, m('meet'), { w: 640, size: 26, fill: COL.dim });
+    tex(p, "\\text{в точке }c:\\ \\ \\varphi(c),\\ \\varphi'(c)", X, 370, m('calc'), { size: 32 });
+    say(p, 'φ′(c) > 0 → минимум левее, b := c', X, 500, m('pos'), { size: 30, fill: OC.x2, weight: 600 });
+    say(p, 'φ′(c) < 0 → минимум правее, a := c', X, 560, m('neg'), { size: 30, fill: OC.x1, weight: 600 });
+    para(p, 'На концах нового отрезка знаки φ′ те же: слева −, справа +. Следующий шаг устроен так же.', X, 650, m('keep'), { w: 640, size: 26, fill: COL.task });
+  }],
+
+  ['q1', 'Проверка: одна итерация', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    tex(p, "c=\\dfrac{\\varphi(b)-\\varphi(a)+a\\varphi'(a)-b\\varphi'(b)}{\\varphi'(a)-\\varphi'(b)}", 120, 190, .3, { size: 36 });
+    tex(p, "\\varphi(x)=x^2,\\quad \\varphi'(x)=2x,\\quad [a;\\,b]=[-1;\\,3]", 120, 400, .6, { size: 36 });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-tan', prompt: ['φ(x) = x² на [−1; 3]. Найдите точку пересечения касательных c и новый отрезок.'],
+    build: numIn([
+      { parts: ['c = ', { num: 1, tol: 1e-6, d: 0, w: 6 }], why: 'c = (9 − 1 + (−1)(−2) − 3·6)/(−2 − 6) = (−8)/(−8) = 1.' },
+      { parts: ['новое a = ', { num: -1, tol: 1e-6, d: 0, w: 6 }], why: 'φ′(1) = 2 > 0 — левый конец не меняется.' },
+      { parts: ['новое b = ', { num: 1, tol: 1e-6, d: 0, w: 6 }], why: 'φ′(c) > 0 ⇒ минимум левее, b := c = 1.' },
+    ]),
+  }, {
+    id: 'c-side', prompt: ['В точке c оказалось φ′(c) < 0. Что делает метод?'],
+    build: choice(['a := c — минимум правее c', 'b := c — минимум левее c', 'останавливается', 'берёт середину отрезка'], 0,
+      'φ в c убывает, значит минимум правее, выбрасывается [a; c].',
+      [null, 'Так делают при φ′(c) > 0.', 'Остановка — только при |φ′(c)| ≤ ε или b − a ≤ ε.', 'Новая точка — снова пересечение касательных.']),
+  }], done) }],
+
+  ['code1', 'Листинг: начало', (m) => {
+    const p = panel(0);
+    kick(p, '7.4 · Функция tangents: концы, счётчик, точка c');
+    const cb = ch7Code(p, .3);
+    ch7Steps(cb, [[25, 25, m('head')], [26, 27, m('ends')], [28, 28, m('cnt')], [30, 31, m('loop')], [33, 33, m('c')], [34, 34, m('fc')], [35, 35, m('cnt2')], [36, 37, m('log')]]);
+    const X = 1030;
+    para(p, 'a, b — концы отрезка, eps — точность, log — список для таблицы', X, 170, m('head'), { w: 510, size: 24 });
+    para(p, 'φ и φ′ в обоих концах — 4 вычисления', X, 262, m('ends'), { w: 510, size: 24 });
+    tag(p, 'cnt = 4', X + 70, 330, COL.task, m('cnt'), { size: 26, mono: true });
+    para(p, 'бесконечный цикл, it += 1', X, 400, m('loop'), { w: 510, size: 24 });
+    tex(p, "c=\\dfrac{\\varphi(b)-\\varphi(a)+a\\varphi'(a)-b\\varphi'(b)}{\\varphi'(a)-\\varphi'(b)}", X, 430, m('c'), { size: 22, color: COL.task, w: 510 });
+    para(p, 'φ(c) и φ′(c): одно вычисление функции и одно производной', X, 560, m('fc'), { w: 510, size: 24 });
+    tag(p, 'cnt += 2', X + 80, 640, COL.task, m('cnt2'), { size: 26, mono: true });
+    para(p, 'строка таблицы 1: it, a, b, c, φ(c), φ′(c)', X, 720, m('log'), { w: 510, size: 24, fill: COL.dim });
+  }],
+
+  ['code2', 'Листинг: остановка и выбор конца', (m) => {
+    const p = panel(0);
+    kick(p, '7.5 · Функция tangents: остановка, замена конца, ответ');
+    const cb = ch7Code(p, .3);
+    ch7Steps(cb, [[38, 39, m('stop')], [40, 42, m('right')], [43, 45, m('left')], [40, 45, m('memo')], [46, 46, m('ret')]]);
+    const X = 1030;
+    tex(p, "|\\varphi'(c)|\\le\\varepsilon\\ \\ \\text{или}\\ \\ b-a\\le\\varepsilon", X, 150, m('stop'), { size: 28, w: 510 });
+    say(p, '→ break', X, 240, m('stop') + .5, { size: 24, fill: COL.dim, font: MONO });
+    say(p, 'φ′(c) > 0 → b, fb, db = c, fc, dc', X, 310, m('right'), { size: 23, fill: OC.x2, weight: 600 });
+    say(p, 'иначе → a, fa, da = c, fc, dc', X, 360, m('left'), { size: 23, fill: OC.x1, weight: 600 });
+    para(p, 'Значения на оставшемся конце запоминаются → за итерацию одно φ и одно φ′.', X, 430, m('memo'), { w: 510, size: 24, fill: COL.task });
+    para(p, 'Ответ: c; второе число −fc = f(c); затем it и cnt.', X, 560, m('ret'), { w: 510, size: 24 });
+    tex(p, 'cnt=4+2\\cdot it', X, 660, m('formula'), { size: 44, color: COL.good, w: 510 });
+  }],
+
+  ['run', 'ЛР2: 9 итераций', (m) => {
+    const p = panel(0);
+    kick(p, '7.6 · ЛР2, вариант 21: метод касательных по итерациям');
+    const g = GT(p);
+    const ts = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7', 's8', 's9'].map(k => m(k));
+    vline(g, 4, .8, { color: COL.good, label: 'x* = 4' });
+    animate(g, CH7_R, { from: 0, to: 9, ts, tangents: true, labels: false });
+    const tb = table(p, { x: 990, y: 150, cols: [['k', 44], ['a', 120], ['b', 120], ['c', 120], ['φ′(c)', 128]], rh: 44, size: 21, t0: ts[0] - .3, mono: [0, 1, 2, 3, 4] });
+    CH7_S.forEach((s, i) => tb.row([String(s.k), ch7F(s.a), ch7F(s.b), ch7F(s.row[3]), { t: ch7Sg(s.row[5]), c: s.row[5] > 0 ? OC.x2 : OC.x1, mono: true }], ts[i + 1] + .2));
+    tb.hl(8, COL.good, m('end'));
+    tag(p, 'отрезок сжался вокруг x* = 4', 1255, 640, COL.good, m('end') + .3, { size: 26, solid: true });
+    say(p, '● a, b — концы', 990, 730, ts[0] + .5, { size: 24, fill: OC.x1 });
+    say(p, '● c — пересечение касательных', 1170, 730, ts[0] + .5, { size: 24, fill: OC.u });
+  }],
+
+  ['tbl', 'Таблица 1 и результат', (m) => {
+    const p = panel(0);
+    kick(p, '7.7 · Таблица 1 отчёта и результат метода касательных');
+    const tb = table(p, { x: 110, y: 140, cols: [['k', 50], ['a', 160], ['b', 160], ['c', 160], ['φ(c)', 190], ['φ′(c)', 160]], rh: 48, size: 24, t0: .2, mono: [0, 1, 2, 3, 4, 5] });
+    CH7_S.forEach((s, i) => tb.row([String(s.k), ch7F(s.a), ch7F(s.b), ch7F(s.row[3]), ch7F(s.row[4]), ch7Sg(s.row[5])], .4 + i * .12));
+    // c слева/справа от 4 — цветом поверх столбца c
+    CH7_S.forEach((s, i) => { const [x, y] = tb.cellBox(i, 3); const r = boxR(p, x + 4, y + 6, 152, 36, { stroke: s.row[3] < 4 ? OC.x1 : OC.x2, sw: 3, rx: 8 }); show(r, m('zig') + .4 + i * .25); });
+    tb.hl(8, COL.good, m('stop'));
+    const X = 1080;
+    say(p, '□ c слева от 4  (φ′ < 0)', X, 180, m('zig'), { size: 24, fill: OC.x1, weight: 600 });
+    say(p, '□ c справа от 4  (φ′ > 0)', X, 222, m('zig') + .3, { size: 24, fill: OC.x2, weight: 600 });
+    tex(p, "|\\varphi'(c_9)|=0,001034\\le\\varepsilon", X, 270, m('stop'), { size: 30, w: 460 });
+    tex(p, 'x=4,000764', X, 360, m('ans'), { size: 36, color: COL.good, w: 460 });
+    tex(p, 'f(x)=10,8268222641', X, 420, m('ans') + .5, { size: 36, color: COL.good, w: 460 });
+    tex(p, '4+2\\cdot9=22', X, 520, m('cnt'), { size: 46, color: COL.task, w: 460 });
+    say(p, 'вычисления φ и φ′', X + 10, 610, m('cnt') + .5, { size: 24, fill: COL.dim });
+    tex(p, "|x-x^*|\\approx\\dfrac{|\\varphi'(c_9)|}{\\varphi''(4)}=\\dfrac{0,001034}{1,353}\\approx7,64\\cdot10^{-4}", 110, 655, m('err'), { size: 34 });
+    tag(p, 'как в отчёте: 7,64·10⁻⁴', 1290, 720, COL.good, m('err') + 3, { size: 26, solid: true });
+  }],
+
+  ['q2', 'Проверка: строка и счётчик', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    const tb = table(p, { x: 120, y: 200, cols: [['k', 50], ['a', 150], ['b', 150], ['c', 150], ['φ′(c)', 150]], rh: 52, size: 24, t0: .3, mono: [0, 1, 2, 3, 4] });
+    const s = CH7_S[3];
+    tb.row([String(s.k), ch7F(s.a), ch7F(s.b), ch7F(s.row[3]), ch7Sg(s.row[5])], .5);
+    tex(p, 'cnt=4+2\\cdot it', 120, 420, .7, { size: 40, color: COL.dim });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-row', prompt: ['Строка 4 таблицы 1: a = 3,892282, b = 4,386790, c = 4,128666, φ′(c) = +0,168533. Каким будет отрезок на 5-й итерации?'],
+    build: numIn([
+      { parts: ['a = ', { num: 3.892282, tol: 1e-6 }], why: 'φ′(c) > 0 — левый конец остаётся 3,892282.' },
+      { parts: ['b = ', { num: 4.128666, tol: 1e-6 }], why: 'b := c = 4,128666 (строка 5 таблицы).' },
+    ]),
+  }, {
+    id: 'c-cnt', prompt: ['Если бы метод остановился на 6-й итерации, какое cnt вернула бы функция tangents?'],
+    build: numIn([{ parts: ['cnt = ', { num: 16, tol: 0, d: 0, w: 6 }], why: '4 в концах + 2·6 = 16.' }]),
+  }], done) }],
+
+  ['eps', 'Таблица 4: разные ε', (m) => {
+    const p = panel(0);
+    kick(p, '7.8 · Таблица 4: сколько стоит точность');
+    const cb = codeBlock(p, ['print("\\nсколько раз считали phi и phi\' при разных eps:")', 'for e in [0.1, 0.01, 0.002, 0.001, 0.0001, 0.00001]:', '    print(e, [method(a0, b0, e)[3] for method in funcs])'], 110, 130, m('code'), { first: 147, w: 800, size: 20 });
+    codeHl(cb, 148, 149, m('code') + 1.5);
+    const E = ['0,1', '0,01', '0,002', '0,001', '0,0001', '0,00001'], N = [14, 20, 22, 28, 32, 40], D = ['', '+3', '', '+4', '+2', '+4'];
+    const Y = 300, RH = 60;
+    const t1 = table(p, { x: 120, y: Y, cols: [['ε', 200], ['вычислений', 220]], rh: RH, size: 30, t0: m('col'), mono: [0, 1] });
+    const t2 = table(p, { x: 540, y: Y, cols: [['итераций', 180]], rh: RH, size: 30, t0: m('it'), mono: [0] });
+    const t3 = table(p, { x: 720, y: Y, cols: [['на порядок ε', 200]], rh: RH, size: 30, t0: m('dec'), mono: [0] });
+    E.forEach((e, i) => {
+      t1.row([e, String(N[i])], m('col') + .3 + i * .5);
+      t2.row([String((N[i] - 4) / 2)], m('it') + 1 + i * .5, { color: COL.task });
+      t3.row([{ t: D[i], c: COL.good, mono: true }], m('dec') + .3);
+    });
+    t1.hl(2, COL.task, m('col') + 3.5);
+    say(p, '(cnt − 4) / 2', 630, 730, m('it') + .5, { size: 24, fill: COL.task, anchor: 'middle', font: MONO });
+    const X = 1000;
+    say(p, 'длина b − a: во сколько раз меньше', X, 330, m('half'), { size: 24, fill: COL.dim, weight: 600 });
+    const L = CH7_S.map(s => s.b - s.a), Q = L.slice(1).map((v, i) => (v / L[i]).toFixed(2).replace('.', ','));
+    tagRow(p, Q.slice(0, 4), X, 385, COL.whole, m('half') + .5, { size: 24, dt: .3 });
+    tagRow(p, Q.slice(4), X, 445, COL.whole, m('half') + 1.7, { size: 24, dt: .3 });
+    tex(p, '\\approx\\tfrac12\\ \\text{за итерацию}', X, 490, m('half') + 3, { size: 36, color: COL.good, w: 540 });
+    tag(p, 'линейная сходимость', X + 230, 660, COL.task, m('lin'), { size: 30, solid: true });
+    para(p, '+2–4 итерации (4–8 вычислений) на каждое уменьшение ε в 10 раз', X, 730, m('lin') + .8, { w: 540, size: 24, fill: COL.dim });
+  }],
+
+  ['concl', 'Вывод', (m) => {
+    const p = panel(0);
+    kick(p, '7.9 · Вывод отчёта о методе касательных');
+    show(boxR(p, 110, 160, 660, 380, { stroke: COL.good, sw: 3 }), m('plus'));
+    say(p, 'плюсы', 140, 215, m('plus'), { size: 32, fill: COL.good, weight: 700 });
+    para(p, '• простой метод', 140, 290, m('plus') + .3, { w: 600, size: 30 });
+    para(p, '• c — пересечение касательных — всегда внутри [a; b]: метод не уходит за границы отрезка', 140, 360, m('plus') + 1.5, { w: 600, size: 30 });
+    show(boxR(p, 830, 160, 660, 380, { stroke: COL.bad, sw: 3 }), m('minus'));
+    say(p, 'минусы', 860, 215, m('minus'), { size: 32, fill: COL.bad, weight: 700 });
+    para(p, '• на каждой итерации нужны и φ, и φ′', 860, 290, m('minus') + .3, { w: 600, size: 30 });
+    para(p, '• сходимость линейная: 9 итераций, 22 вычисления функции и производной', 860, 360, m('lin'), { w: 600, size: 30 });
+    tag(p, 'дальше: метод Брента на той же задаче (глава 8)', 800, 660, COL.task, m('next'), { size: 30 });
+  }],
+
+  ['sum', 'Главное', (m) => {
+    const p = panel(0);
+    wrapList(p, [['c — пересечение касательных в a и b; при φ′(a) < 0 < φ′(b) она всегда внутри [a; b].', 'w1'],
+      ['φ′(c) > 0 ⇒ b := c, φ′(c) < 0 ⇒ a := c; значения на оставшемся конце запоминаются.', 'w2'],
+      ['За итерацию одно φ и одно φ′: cnt = 4 + 2·it; ЛР2: 9 итераций, 22 вычисления.', 'w3'],
+      ['Таблица 4: 14 → 40 вычислений; на порядок ε +2–4 итерации — сходимость линейная.', 'w4']], m, { size: 30 });
+  }],
+
+  ['final1', 'Практика 1', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-c1', prompt: ['Вариант 21: φ(2) = −7,357589, φ′(2) = −3,678794, φ(6) = −8,961672, φ′(6) = 1,493612. Найдите первую точку метода касательных (6 знаков), а затем — отрезок второй итерации, если φ′(c₁) = −0,819247.'],
+    build: numIn([
+      { parts: ['c₁ = ', { num: CH7_S[0].row[3], tol: 5e-6 }], why: 'c = (−8,961672 + 7,357589 + 2·(−3,678794) − 6·1,493612)/(−3,678794 − 1,493612) ≈ 3,465185.' },
+      { parts: ['a = ', { num: CH7_S[0].row[3], tol: 5e-6 }], why: 'φ′(c₁) < 0 ⇒ a := c₁ = 3,465185.' },
+      { parts: ['b = ', { num: 6, tol: 1e-6, d: 0, w: 6 }], why: 'Правый конец не меняется: b = 6.' },
+    ]),
+  }], done, 'Практика главы   1 из 3') }],
+
+  ['final2', 'Практика 2', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-run', prompt: ['Пусть в программе phi(x) = (x − 1)², dphi(x) = 2(x − 1). Что вернёт tangents(0, 4, 0.002)? Пройдите цикл руками.'],
+    build: numIn([
+      { parts: ['c = ', { num: 1, tol: 1e-6, d: 0, w: 6 }], why: 'Итерация 1: c = (9 − 1 + 0 − 4·6)/(−2 − 6) = 2, φ′(2) = 2 > 0 ⇒ b := 2. Итерация 2: c = (1 − 1 + 0 − 2·2)/(−2 − 2) = 1, φ′(1) = 0 ⇒ стоп.' },
+      { parts: ['it = ', { num: 2, tol: 0, d: 0, w: 6 }], why: 'Остановка на второй итерации: |φ′(1)| = 0 ≤ eps.' },
+      { parts: ['cnt = ', { num: 8, tol: 0, d: 0, w: 6 }], why: '4 + 2·2 = 8.' },
+    ]),
+  }], done, 'Практика главы   2 из 3') }],
+
+  ['final3', 'Практика 3', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-eps', prompt: ['Таблица 4: при ε = 0,1 метод касательных насчитал 14 вычислений, при ε = 0,00001 — 40. Сколько итераций он сделал в каждом случае?'],
+    build: numIn([
+      { parts: ['ε = 0,1: it = ', { num: 5, tol: 0, d: 0, w: 6 }], why: '(14 − 4)/2 = 5.' },
+      { parts: ['ε = 0,00001: it = ', { num: 18, tol: 0, d: 0, w: 6 }], why: '(40 − 4)/2 = 18.' },
+    ]),
+  }, {
+    id: 'p-tf', prompt: ['Верно или неверно?'],
+    build: TFQ([
+      ['Точка c может выйти за пределы [a; b]', false, 'При φ′(a) < 0 < φ′(b) пересечение касательных всегда внутри отрезка.'],
+      ['На итерации программа вычисляет φ(c) и φ′(c)', true, 'Строка 34: fc, dc = phi(c), dphi(c).'],
+      ['Метод остановился, потому что длина отрезка стала не больше ε', false, 'На 9-й итерации сработало |φ′(c)| = 0,001034 ≤ ε; длина была ≈ 0,0147.'],
+      ['Отрезок за итерацию сокращается в среднем примерно в 2 раза', true, 'Поэтому сходимость линейная.'],
+    ]),
+  }], done, 'Практика главы   3 из 3') }],
+
+  ['finish', 'Финиш', () => { panel(0); }, { ask: finishCard }],
+].map(([id, title, run, extra]) => ({ id, title, run, ...extra }));
+
+boot();
+</script>
+</body>
+</html>

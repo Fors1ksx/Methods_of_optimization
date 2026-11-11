@@ -1,0 +1,599 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Экзамен — Методы оптимизации</title>
+<meta name="description" content="Экзамен по всем главам учебника «Методы оптимизации»: случайные вопросы, таймер, разбор ошибок со ссылками на уроки.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%231d2b27'/%3E%3Ctext x='32' y='45' text-anchor='middle' font-size='48' fill='%23f0b45a'%3E∞%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="../lib/pages.css">
+<script src="../lib/pages.js"></script>
+<script src="../lib/bank.js"></script>
+<style>
+.form { display: grid; gap: 18px; }
+.field { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 8px 16px; align-items: center; }
+.field .lab { color: var(--dim); font-size: 15px; font-weight: 600; }
+.go-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 18px; padding-top: 6px; border-top: 1px solid #2e433b; margin-top: 4px; }
+.go-row .btn { margin-top: 12px; }
+.go-row .note { margin-top: 12px; }
+.picks { margin: 14px 0 0; padding: 0; list-style: none; font-size: 15px; color: var(--dim); }
+.picks li { margin-top: 4px; }
+.picks a { color: var(--quiz); }
+.history { margin-top: 26px; }
+.history h2 { font-size: 22px; margin-bottom: 10px; }
+.hist { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.hist li { display: grid; grid-template-columns: 130px 90px minmax(0, 1fr); gap: 12px; align-items: center; color: var(--dim); font-size: 15px; }
+.hist .pct { color: var(--chalk); font-weight: 600; font-variant-numeric: tabular-nums; }
+.hist .bar { height: 6px; border-radius: 3px; background: #2f4640; overflow: hidden; }
+.hist .bar i { display: block; height: 100%; background: var(--good); }
+
+/* ход экзамена */
+.runbar { position: sticky; top: 57px; z-index: 3; display: flex; align-items: center; gap: 14px; margin: 0 -16px; padding: 12px 16px;
+  background: rgba(29, 43, 39, .94); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.runbar #qNum { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.meter { flex: 1; height: 8px; border-radius: 4px; background: #2f4640; overflow: hidden; min-width: 60px; }
+.meter i { display: block; height: 100%; width: 0; background: var(--chalk); transition: width .3s var(--ease); }
+.timer { font: 600 17px var(--mono); font-variant-numeric: tabular-nums; color: var(--dim); }
+.timer.warn { color: var(--bad); }
+.q { margin-top: 18px; }
+.q .kicker { color: var(--c, var(--quiz)); }
+.q .scene { display: block; max-width: 100%; height: auto; margin: 14px 0 4px; border-radius: 14px; border: 1px solid #2e433b; }
+.q .prompt { margin: 12px 0 18px; font: 600 clamp(20px, 2.8vw, 26px)/1.3 var(--ui); white-space: pre-line; }
+.q .acts { margin-top: 22px; justify-content: flex-end; }
+.q .hint { margin: 14px 0 0; color: var(--dim); font-size: 14px; }
+.q .hint kbd { margin: 0 .1em; }
+.nudge { animation: nudge .4s; }
+@keyframes nudge { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+
+/* итог */
+.score { display: flex; align-items: center; gap: 22px; }
+.score .mascot { width: 120px; height: 84px; }
+.ures { display: grid; gap: 8px; margin: 24px 0; }
+.ures li { display: grid; grid-template-columns: minmax(0, 1fr) 70px 160px; gap: 12px; align-items: center; font-size: 15px; }
+.ures span:first-child { color: var(--chalk); }
+.ures .n { color: var(--dim); text-align: right; font-variant-numeric: tabular-nums; }
+.ures .bar { height: 8px; border-radius: 4px; background: #2f4640; overflow: hidden; }
+.ures .bar i { display: block; height: 100%; background: var(--c); }
+.review { display: grid; gap: 12px; margin: 16px 0 0; padding: 0; list-style: none; counter-reset: q; }
+.rv { padding: 16px 18px; border-radius: 16px; background: var(--panel); border: 1.5px solid var(--edge); border-left: 6px solid var(--good); }
+.rv.bad { border-left-color: var(--bad); }
+.rv.skip { border-left-color: var(--faint); }
+.rv-head { display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: baseline; font-size: 14px; color: var(--dim); }
+.rv-head .mk { font-weight: 700; font-size: 16px; }
+.rv.good .mk { color: var(--good); }
+.rv.bad .mk { color: var(--bad); }
+.rv-head a { color: var(--dim); }
+.rv-q { margin: 6px 0 8px; font-size: 17px; font-weight: 600; white-space: pre-line; }
+.rv img { display: block; max-width: min(100%, 520px); height: auto; margin: 6px 0 10px; border-radius: 10px; border: 1px solid #2e433b; }
+.rv p { margin: 4px 0 0; }
+.rv .yours { color: var(--bad); }
+.rv .right { color: var(--good); }
+.rv .why { color: var(--dim); font-size: 15px; }
+.rv .lnk { display: inline-block; margin-top: 8px; color: var(--quiz); font-size: 15px; font-weight: 600; }
+.rows { width: 100%; margin-top: 6px; border-collapse: collapse; font-size: 15px; }
+.rows td { padding: 6px 8px 6px 0; border-top: 1px solid #2e433b; vertical-align: top; }
+.rows td.m { width: 22px; font-weight: 700; }
+.rows tr.ok td.m { color: var(--good); }
+.rows tr.no td.m { color: var(--bad); }
+.rows .y { color: var(--bad); }
+.rows tr.ok .y { color: var(--dim); }
+.rows .r { color: var(--good); }
+.rows .w { display: block; color: var(--dim); font-size: 14px; }
+.rows a { color: var(--quiz); font-size: 14px; white-space: nowrap; }
+.mono { font-family: var(--mono); }
+/* задачи тренажёра IPv4: разбор по шагам */
+.sol { margin: 10px 0 8px; padding-left: 24px; }
+.sol li { margin: 3px 0; }
+.sol code { color: var(--l3); }
+.sol .ip { font-size: .94em; }
+.rv .sol { color: var(--dim); font-size: 15px; }
+@media (max-width: 640px) {
+  .field { grid-template-columns: 1fr; }
+  .hist li { grid-template-columns: 100px 70px minmax(0, 1fr); }
+  .ures li { grid-template-columns: minmax(0, 1fr) 56px 80px; }
+  .runbar { top: 53px; gap: 10px; }
+  .score .mascot { display: none; }
+  .rows td { display: block; border: 0; padding: 2px 0; }
+  .rows tr { display: block; padding: 6px 0; border-top: 1px solid #2e433b; }
+  .rows td.m { display: inline; }
+}
+</style>
+</head>
+<body>
+<header class="top" id="top"></header>
+<main class="wrap">
+
+<section id="setup">
+  <div class="head rise">
+    <p class="kicker" id="sKick">Проверка знаний</p>
+    <h1 id="sTitle">Экзамен</h1>
+    <p class="lede" id="sLede">Случайные вопросы из глав книги — без подсказок, как на настоящем экзамене. Разбор в конце со ссылками на уроки; каждая ошибка попадёт в «Работу над ошибками».</p>
+  </div>
+  <div class="panel form rise">
+    <div class="field"><span class="lab">Вопросы</span>
+      <div class="seg" id="fSrc"><button data-v="all">Все главы</button><button data-v="units">Выбрать разделы</button><button data-v="miss">Мои ошибки<b id="missN"></b></button></div></div>
+    <div class="field" id="unitsField"><span class="lab">Разделы</span><div class="chips" id="fUnits"></div></div>
+    <div class="field" id="nField"><span class="lab">Сколько</span>
+      <div class="seg" id="fN"><button data-v="10">10</button><button data-v="20">20</button><button data-v="30">30</button><button data-v="50">50</button></div></div>
+    <div class="field" id="timeField"><span class="lab">Время</span>
+      <div class="seg" id="fTime"><button data-v="0">Без таймера</button><button data-v="60">1 мин на вопрос</button><button data-v="120">2 мин на вопрос</button></div></div>
+    <div class="field" id="showField"><span class="lab">Ответы</span>
+      <div class="seg" id="fShow"><button data-v="end">В конце</button><button data-v="now">Сразу, с пояснением</button></div></div>
+    <div class="go-row"><button class="btn go" id="bStart">Начать <kbd>Enter</kbd></button><span class="note" id="srcNote"></span></div>
+    <ul class="picks" id="picks" hidden></ul>
+  </div>
+  <div class="history" id="history" hidden><h2>Прошлые экзамены</h2><ol class="hist" id="hist"></ol></div>
+</section>
+
+<section id="run" hidden>
+  <div class="runbar"><span id="qNum"></span><div class="meter"><i id="qMeter"></i></div><span class="timer" id="timer" hidden></span>
+    <button class="btn quiet sm" id="bStop">Завершить</button></div>
+  <article class="panel q" id="qCard"></article>
+</section>
+
+<section id="result" hidden>
+  <div class="head">
+    <p class="kicker" id="rKick">Экзамен завершён</p>
+    <div class="score"><svg class="mascot" id="rGuide" width="120" height="84"></svg><div><h1 id="rScore"></h1><p class="lede" id="rLede"></p></div></div>
+  </div>
+  <ol class="ures" id="rUnits"></ol>
+  <div class="acts"><button class="btn go" id="bRetry"></button><button class="btn quiet" id="bNew">Новый экзамен</button><a class="btn quiet" href="../#contents">К главам</a></div>
+  <h2 style="margin-top:34px">Разбор</h2>
+  <ol class="review" id="rList"></ol>
+</section>
+
+</main>
+<script>
+'use strict';
+const MODE = new URLSearchParams(location.search).get('mode');
+topBar(MODE === 'miss' ? 'miss' : 'exam');
+const HUES = ['#86c9e8', '#f3c95c', '#8fd6b0', '#f4a48c', '#e8a0c8', '#bba8ee'];
+const Q = self.BANK?.q || [];
+const byKey = Object.fromEntries(Q.map(x => [x.ch + '/' + x.id, x]));
+const unitOf = ch => BANK.chapters[ch].unit;
+const unitColor = u => HUES[(BANK.units[u - 1][2] - 1) % HUES.length];
+const chName = ch => `Глава ${ch} · ${BANK.chapters[ch].title}`;
+// Задачи тренажёра IPv4 в работе над ошибками: собираются заново по ключу (lib/ipv4.js) — с теми же числами, что в тренажёре.
+const T_COLOR = '#f3c95c';
+const isT = x => x.type === 'ipv4';
+const trainerMissed = () => [];   // задачи тренажёра повторяются на странице тренажёра
+const kickerOf = x => isT(x) ? 'Тренажёр · ' + x.t.title : chName(x.ch);
+// Как в уроках (net.js): без учёта регистра и лишних пробелов, ё = е.
+const norm = s => String(s).trim().toLowerCase().replace(/\s+/g, ' ').replace(/ё/g, 'е');
+const rowsOf = x => x.type === 'grid' ? x.items.length : x.type === 'typeIn' ? x.rows.length : isT(x) ? x.t.fields?.length || 1 : 1;
+const fmtTime = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+
+/* ---------- настройки (запоминаются в этом браузере) ---------- */
+const SKEY = 'animebook:exam-settings';
+const set = { src: 'all', units: BANK?.units?.map((_, i) => i + 1) || [], n: 20, time: 0, show: 'end' };
+try { const s = JSON.parse(localStorage.getItem(SKEY) || '{}'); if (isObj(s)) Object.assign(set, s); } catch {}
+if (MODE === 'miss') set.src = 'miss'; else if (set.src === 'miss') set.src = 'all';
+const saveSet = () => { try { localStorage.setItem(SKEY, JSON.stringify({ ...set, src: set.src === 'miss' ? 'all' : set.src })); } catch {} };
+function bindSeg(id, get, put) {
+  const el = $(id);
+  const sync = () => el.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === String(get()))));
+  el.addEventListener('click', e => { const b = e.target.closest('button'); if (!b) return; put(b.dataset.v); saveSet(); refresh(); });
+  return sync;
+}
+const syncs = [
+  bindSeg('fSrc', () => set.src, v => { set.src = v; }),
+  bindSeg('fN', () => set.n, v => { set.n = +v; }),
+  bindSeg('fTime', () => set.time, v => { set.time = +v; }),
+  bindSeg('fShow', () => set.show, v => { set.show = v; }),
+];
+$('fUnits').append(...(BANK?.units || []).map(([name], i) => {
+  const b = h('button', 'chip', name);
+  b.style.setProperty('--c', unitColor(i + 1));
+  b.onclick = () => {
+    const u = i + 1, on = set.units.includes(u);
+    set.units = on ? set.units.filter(x => x !== u) : [...set.units, u].sort((a, c) => a - c);
+    saveSet(); refresh();
+  };
+  return b;
+}));
+
+// Вопросы выборки. В «моих ошибках» вопросы-щелчки по схеме не задать вне урока — для них ссылки на урок;
+// задачи тренажёра IPv4 идут вместе с вопросами.
+function pool() {
+  if (set.src === 'miss') return [...missed().map(m => byKey[m.ch + '/' + m.id]).filter(Boolean), ...trainerMissed()];
+  const us = set.src === 'units' ? new Set(set.units) : null;
+  return Q.filter(x => x.exam && (!us || us.has(unitOf(x.ch))));
+}
+function refresh() {
+  syncs.forEach(f => f());
+  const miss = set.src === 'miss';
+  $('fUnits').querySelectorAll('.chip').forEach((b, i) => b.setAttribute('aria-pressed', String(set.units.includes(i + 1))));
+  $('unitsField').hidden = set.src !== 'units';
+  $('nField').hidden = $('timeField').hidden = $('showField').hidden = miss;
+  const nMiss = missed().filter(m => byKey[m.ch + '/' + m.id]).length + trainerMissed().length;
+  $('missN').textContent = nMiss ? ' ' + nMiss : '';
+  const p = pool(), ask = p.filter(x => x.exam), nT = ask.filter(isT).length, nQ = ask.length - nT;
+  $('sKick').textContent = miss ? 'Повторение' : 'Проверка знаний';
+  $('sTitle').textContent = miss ? 'Работа над ошибками' : 'Экзамен';
+  $('sLede').textContent = miss
+    ? 'Вопросы, на которые последний ответ был неверным — в уроках или на экзамене, и нерешённые задачи тренажёра IPv4. Ответ виден сразу; решённое верно уходит из списка.'
+    : 'Случайные вопросы из глав книги — без подсказок, как на настоящем экзамене. Разбор в конце со ссылками на уроки; каждая ошибка попадёт в «Работу над ошибками».';
+  document.title = (miss ? 'Работа над ошибками' : 'Экзамен') + ' — Методы оптимизации';
+  $('srcNote').textContent = !Q.length ? 'Банк вопросов не загрузился (lib/bank.js).'
+    : miss ? (ask.length ? [nQ && `${nQ} ${plural(nQ, 'вопрос', 'вопроса', 'вопросов')}`, nT && `${nT} ${plural(nT, 'задача', 'задачи', 'задач')} тренажёра IPv4`].filter(Boolean).join(' и ') + ' к повторению.' : 'Ошибок нет — отличная работа.')
+    : `В выборке ${ask.length} ${plural(ask.length, 'вопрос', 'вопроса', 'вопросов')}` + (ask.length < set.n ? ` — будут заданы все.` : `, будет задано ${set.n}.`);
+  $('bStart').disabled = !ask.length;
+  const picks = miss ? p.filter(x => !x.exam) : [];
+  $('picks').hidden = !picks.length;
+  $('picks').innerHTML = picks.length ? `<li>Эти вопросы нужно решать на схеме урока:</li>` + picks.map(x =>
+    `<li><a href="${lessonHref(x.ch, x.beat)}">${esc(chName(x.ch))}: ${esc(x.text)}</a></li>`).join('') : '';
+  const ex = loadProgress().exams;
+  $('history').hidden = !ex.length || miss;
+  $('hist').innerHTML = ex.slice(0, 6).map(e => {
+    const pct = Math.round(e.ok / e.n * 100);
+    return `<li><span>${new Date(e.d).toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' })}, ${new Date(e.d).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' })}</span>` +
+      `<span class="pct">${e.ok} из ${e.n}</span><span class="bar" title="${pct} %"><i style="width:${pct}%"></i></span></li>`;
+  }).join('');
+}
+
+/* ---------- ответы: выбор, таблица, ввод ---------- */
+// Каждый вид вопроса: el, read() → { right, total, wrong, answered, given }, reveal(), lock(), key(e)?
+function choiceUI(x) {
+  const order = shuffle(x.opts.map((_, i) => i)), bs = [];
+  let sel = -1;
+  const el = h('div', 'opts' + (x.opts.some(o => o.length > 34) ? ' col' : ''));
+  order.forEach((i, pos) => {
+    const b = h('button', 'opt', [h('kbd', '', String(pos + 1)), x.opts[i]]);
+    b.onclick = () => { sel = i; bs.forEach(o => o.setAttribute('aria-pressed', String(o === b))); };
+    bs[i] = b; el.append(b);
+  });
+  return {
+    el,
+    read: () => ({ right: +(sel === x.right), total: 1, wrong: sel === x.right ? [] : [0], answered: sel >= 0, given: sel >= 0 ? x.opts[sel] : null, sel }),
+    reveal() { bs[x.right].classList.add('good'); if (sel >= 0 && sel !== x.right) bs[sel].classList.add('bad'); },
+    lock() { bs.forEach(b => { b.disabled = true; }); },
+    key(e) { const b = bs[order[+e.key - 1]]; if (!b) return false; b.click(); return true; },
+    hint: ['Клавиши: ', h('kbd', '', '1'), '–', h('kbd', '', String(x.opts.length)), ' выбрать, ', h('kbd', '', 'Enter'), ' ответить'],
+  };
+}
+function gridUI(x) {
+  const tf = x.cols.length === 2 && x.cols[0][0] === 't' && x.cols[1][0] === 'f';
+  const hot = tf ? ['T', 'F'] : x.cols.map((_, j) => String(j + 1));
+  let cur = 0;
+  const rows = x.items.map((it, ri) => {
+    const sel = new Set(), mk = h('span', 'mk'), why = h('div', 'why');
+    const bs = x.cols.map(([key, lab], j) => {
+      const b = h('button', 'opt', [h('kbd', '', hot[j]), lab]);
+      b.onclick = () => {
+        if (x.multi) sel.has(key) ? sel.delete(key) : sel.add(key); else { sel.clear(); sel.add(key); }
+        bs.forEach((o, k) => o.setAttribute('aria-pressed', String(sel.has(x.cols[k][0]))));
+        cur = ri; mark();
+      };
+      return b;
+    });
+    const row = h('div', 'qrow', [h('div', 'qt', it.text), h('div', 'opts', bs), mk, why]);
+    row.onclick = e => { if (!e.target.closest('button')) { cur = ri; mark(); } };
+    return { it, sel, bs, mk, why, row };
+  });
+  const single = rows.length === 1;
+  const mark = () => rows.forEach((r, i) => r.row.classList.toggle('cur', !single && i === cur));
+  mark();
+  const okRow = r => r.sel.size === r.it.ans.length && r.it.ans.every(a => r.sel.has(a));
+  const lab = k => x.cols.find(c => c[0] === k)?.[1] ?? k;
+  return {
+    el: h('div', 'qgrid', rows.map(r => r.row)),
+    read() {
+      const oks = rows.map(okRow);
+      return { right: oks.filter(Boolean).length, total: rows.length, wrong: oks.flatMap((ok, i) => ok ? [] : [i]),
+        answered: rows.every(r => r.sel.size), given: rows.map(r => [...r.sel].map(lab).join(', ')) };
+    },
+    reveal() {
+      rows.forEach(r => {
+        const ok = okRow(r);
+        r.mk.className = 'mk ' + (ok ? 'good' : 'bad'); r.mk.textContent = ok ? '✓' : '✗';
+        r.bs.forEach((b, k) => { if (r.it.ans.includes(x.cols[k][0])) b.classList.add('good'); else if (r.sel.has(x.cols[k][0])) b.classList.add('bad'); });
+        if (!ok) r.why.textContent = r.it.why;
+      });
+    },
+    lock() { rows.forEach(r => r.bs.forEach(b => { b.disabled = true; })); cur = -1; mark(); },
+    key(e) {
+      if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !single) { cur = (cur + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length; mark(); return true; }
+      const j = hot.findIndex(k => k.toLowerCase() === e.key.toLowerCase() || (/^[A-Z]$/.test(k) && e.code === 'Key' + k));
+      if (j < 0 || cur < 0) return false;
+      rows[cur].bs[j].click();
+      if (!x.multi && cur < rows.length - 1) { cur++; mark(); }
+      return true;
+    },
+    hint: ['Клавиши: ', ...(single ? [] : [h('kbd', '', '↑'), h('kbd', '', '↓'), ' строка, ']), ...(tf ? [h('kbd', '', 'T'), h('kbd', '', 'F')] : [h('kbd', '', '1'), '–', h('kbd', '', hot[hot.length - 1])]), ' выбрать, ', h('kbd', '', 'Enter'), ' ответить'],
+  };
+}
+function typeUI(x) {
+  const rows = x.rows.map(r => {
+    const boxes = [], line = h('div', 'tline'), why = h('span', 'why');
+    for (const p of r.parts) {
+      if (typeof p === 'string') { line.append(h('span', 'lbl', p)); continue; }
+      const b = h('input', 'box');
+      Object.assign(b, { type: 'text', autocomplete: 'off', spellcheck: false, autocapitalize: 'off' });
+      b.setAttribute('aria-label', 'Ответ');
+      b.style.setProperty('--w', Math.max(p.num !== undefined ? 11 : 5, p.box.length + 2) + 'ch');
+      b._ok = [p.box, ...p.alts].map(norm); b._show = p.box;
+      // числовой ответ (numIn в уроках): сравнение с допуском, запятая = точка
+      if (p.num !== undefined) b._num = { v: p.num, tol: p.tol ?? Math.max(5e-4 * Math.abs(p.num), 5e-4) };
+      boxes.push(b); line.append(b);
+    }
+    line.append(why);
+    return { r, boxes, why, line };
+  });
+  const boxOk = b => { if (b._num) { const t = String(b.value).trim().replace(/\s/g, '').replace(',', '.').replace('−', '-'), v = t === '' ? NaN : Number(t); return isFinite(v) && Math.abs(v - b._num.v) <= b._num.tol + 1e-12; } return b._ok.includes(norm(b.value)); };
+  const okRow = row => row.boxes.every(boxOk);
+  setTimeout(() => rows[0]?.boxes[0]?.focus(), 30);
+  return {
+    el: h('div', 'tlines', rows.map(r => r.line)),
+    read() {
+      const oks = rows.map(okRow);
+      return { right: oks.filter(Boolean).length, total: rows.length, wrong: oks.flatMap((ok, i) => ok ? [] : [i]),
+        answered: rows.some(r => r.boxes.some(b => b.value.trim())), given: rows.map(r => r.boxes.map(b => b.value.trim()).join(' / ')) };
+    },
+    reveal() {
+      for (const row of rows) {
+        for (const b of row.boxes) {
+          const ok = boxOk(b);
+          b.classList.add(ok ? 'good' : 'bad');
+          if (!ok) b.after(h('span', 'fix', '→ ' + b._show));
+        }
+        if (!okRow(row)) row.why.textContent = row.r.why;
+      }
+    },
+    lock() { rows.forEach(r => r.boxes.forEach(b => { b.disabled = true; })); },
+    hint: ['Клавиши: ', h('kbd', '', 'Tab'), ' следующее поле, ', h('kbd', '', 'Enter'), ' ответить. Регистр и лишние пробелы не важны.'],
+  };
+}
+// Задача тренажёра IPv4: поля ввода или выбор, как в тренажёре; проверка — из lib/ipv4.js.
+function ipv4UI(t) {
+  if (t.choice) {
+    const c = t.choice;
+    let sel = -1;
+    const bs = c.opts.map((o, i) => {
+      const b = h('button', 'opt' + (c.mono ? ' mono' : ''), [h('kbd', '', String(i + 1)), o]);
+      b.onclick = () => { sel = i; bs.forEach(x => x.setAttribute('aria-pressed', String(x === b))); };
+      return b;
+    });
+    return {
+      el: h('div', 'opts' + (c.opts.some(o => o.length > 28) ? ' col' : ''), bs),
+      read: () => ({ right: +(sel === c.right), total: 1, wrong: sel === c.right ? [] : [0], answered: sel >= 0, given: sel >= 0 ? c.opts[sel] : null, sel }),
+      reveal() { bs[c.right].classList.add('good'); if (sel >= 0 && sel !== c.right) bs[sel].classList.add('bad'); },
+      lock() { bs.forEach(b => { b.disabled = true; }); },
+      key(e) { const b = bs[+e.key - 1]; if (!b) return false; b.click(); return true; },
+      hint: ['Клавиши: ', h('kbd', '', '1'), '–', h('kbd', '', String(c.opts.length)), ' выбрать, ', h('kbd', '', 'Enter'), ' ответить'],
+    };
+  }
+  const rows = t.fields.map((f, i) => {
+    const box = h('input', 'box'), lab = h('label', '', f.label), mk = h('span', 'mk');
+    Object.assign(box, { id: 'tf' + i, type: 'text', autocomplete: 'off', spellcheck: false, autocapitalize: 'off', inputMode: ['num', 'prefix', 'bits'].includes(f.kind) ? 'numeric' : 'text' });
+    lab.htmlFor = box.id;
+    box.style.setProperty('--w', IPV4.widthOf(f.kind));
+    return { f, box, lab, mk, cell: h('div', 'cell', [box, mk]) };
+  });
+  const oks = () => IPV4.grade(t, rows.map(r => r.box.value));
+  setTimeout(() => rows[0]?.box.focus(), 30);
+  return {
+    el: h('div', 'fields', rows.flatMap(r => [r.lab, r.cell])),
+    read() {
+      const o = oks();
+      return { right: o.filter(Boolean).length, total: o.length, wrong: o.flatMap((ok, i) => ok ? [] : [i]),
+        answered: rows.some(r => r.box.value.trim()), given: rows.map(r => r.box.value.trim()) };
+    },
+    reveal() {
+      oks().forEach((ok, i) => {
+        const r = rows[i];
+        r.box.classList.add(ok ? 'good' : 'bad');
+        r.mk.className = 'mk ' + (ok ? 'good' : 'bad'); r.mk.textContent = ok ? '✓' : '✗';
+        if (!ok) r.cell.append(h('span', 'fix', '→ ' + IPV4.showAns(r.f.kind, r.f.ans)));
+      });
+    },
+    lock() { rows.forEach(r => { r.box.disabled = true; }); },
+    hint: [t.hint ? t.hint + ' ' : null, 'Клавиши: ', h('kbd', '', 'Tab'), ' следующее поле, ', h('kbd', '', 'Enter'), ' ответить.'],
+  };
+}
+// Разбор задачи тренажёра по шагам и ссылка на тот же приём в уроке.
+function solution(t) { const ol = h('ol', 'sol'); ol.innerHTML = t.steps.map(x => `<li>${x}</li>`).join(''); return ol; }
+function lessonLink(t) { const a = h('a', 'lnk', `Как в уроке: ${t.src} →`); a.href = t.href; return a; }
+const makeUI = x => x.type === 'choice' ? choiceUI(x) : x.type === 'grid' ? gridUI(x) : isT(x) ? ipv4UI(x.t) : typeUI(x);
+
+/* ---------- ход экзамена ---------- */
+let run = null, ui = null, state = 'setup', timer = 0;
+function view(v) {
+  for (const s of ['setup', 'run', 'result']) $(s).hidden = s !== v;
+  state = v === 'run' ? 'ask' : v;
+  scrollTo(0, 0);
+}
+function begin(list, opts) {
+  run = { list, k: 0, ans: [], ...opts, t0: Date.now() };
+  view('run');
+  clearInterval(timer);
+  $('timer').hidden = !run.time;
+  if (run.time) {
+    run.end = run.t0 + run.time * 1000 * list.length;
+    const tick = () => {
+      const left = Math.max(0, (run.end - Date.now()) / 1000);
+      $('timer').textContent = fmtTime(left);
+      $('timer').classList.toggle('warn', left < 60);
+      if (!left) finish();
+    };
+    tick(); timer = setInterval(tick, 500);
+  }
+  showQ();
+}
+function showQ() {
+  const x = run.list[run.k];
+  $('qNum').textContent = `Вопрос ${run.k + 1} из ${run.list.length}`;
+  $('qMeter').style.width = run.k / run.list.length * 100 + '%';
+  ui = makeUI(x);
+  const card = $('qCard');
+  card.style.setProperty('--c', isT(x) ? T_COLOR : unitColor(unitOf(x.ch)));
+  const skip = h('button', 'btn quiet', 'Пропустить'), answer = h('button', 'btn go', ['Ответить ', h('kbd', '', 'Enter')]);
+  skip.onclick = () => record(true);
+  answer.onclick = submit;
+  const img = x.img ? h('img', 'scene') : null;
+  if (img) Object.assign(img, { src: 'img/' + x.img, alt: 'Схема к вопросу из урока', loading: 'eager' });
+  run.fb = h('div', 'fb'); run.fb.hidden = true;
+  run.acts = h('div', 'acts', [skip, answer]);
+  const prompt = h('h2', 'prompt');
+  if (isT(x)) prompt.innerHTML = x.t.stmt; else prompt.textContent = x.text;
+  card.replaceChildren(...[h('p', 'kicker', kickerOf(x)), img, prompt, ui.el, h('p', 'hint', ui.hint), run.fb, run.acts].filter(Boolean));
+  card.classList.remove('rise'); void card.offsetWidth; card.classList.add('rise');
+  state = 'ask';
+}
+function submit() {
+  if (state === 'shown') return next();
+  if (state !== 'ask') return;
+  if (!ui.read().answered) { const c = $('qCard'); c.classList.remove('nudge'); void c.offsetWidth; c.classList.add('nudge'); return; }
+  record(false);
+}
+function record(skipped) {
+  const x = run.list[run.k], r = ui.read();
+  if (skipped) Object.assign(r, { right: 0, wrong: [...Array(rowsOf(x)).keys()], skipped: true, given: null, sel: -1 });
+  const ok = !skipped && r.right === r.total;
+  run.ans[run.k] = { x, r, ok };
+  // Результат вопроса — тот же, что пишут уроки: последний ответ решает, остаётся ли вопрос в ошибках.
+  if (!skipped && isT(x)) IPV4.note(x.key, ok);
+  else if (!skipped) progress(p => { (p.res[x.ch] ??= {})[x.id] = ok ? [r.total, r.total] : [r.right, r.total, r.wrong]; });
+  missBadge();
+  if (run.show === 'now' && !skipped) {
+    ui.lock(); ui.reveal();
+    showFeedback(x, r, ok);
+    const nx = h('button', 'btn go', [run.k < run.list.length - 1 ? 'Дальше ' : 'Итог ', h('kbd', '', 'Enter')]);
+    nx.onclick = next;
+    run.acts.replaceChildren(nx);
+    state = 'shown';
+    setTimeout(() => nx.focus({ preventScroll: true }), 0);
+  } else next();
+}
+function showFeedback(x, r, ok) {
+  const fb = run.fb, parts = [];
+  if (ok) parts.push(h('b', 'ok', 'Верно. '));
+  else parts.push(h('b', 'no', r.total > 1 ? `Не совсем: верно ${r.right} из ${r.total}. ` : 'Не совсем. '));
+  if (isT(x)) {
+    parts.push(solution(x.t));
+    if (!ok) parts.push(lessonLink(x.t));
+  } else if (x.type === 'choice') {
+    if (!ok && x.no?.[r.sel]) parts.push(x.no[r.sel] + ' ');
+    if (!ok) parts.push(h('span', '', ['Правильно: ', h('b', 'ok', x.opts[x.right]), '. ']));
+    parts.push(x.yes || '');
+  } else if (!ok) parts.push('Правильные ответы отмечены, у неверных строк — пояснение.');
+  // Ссылка — на шаг урока с объяснением; у таблиц — на объяснение первой неверной строки.
+  const beat = !isT(x) && ((r.wrong?.[0] != null && x.exRows?.[r.wrong[0]]) || x.ex);
+  if (!ok && beat) { const a = h('a', '', 'Объяснение в уроке →'); a.href = lessonHref(x.ch, beat); parts.push(' ', a); }
+  fb.replaceChildren(...parts);
+  fb.className = 'fb ' + (ok ? 'ok' : 'no');
+  fb.hidden = false;
+}
+function next() {
+  if (++run.k < run.list.length) showQ(); else finish();
+}
+function finish() {
+  clearInterval(timer);
+  if (!run || state === 'result') return;
+  const n = run.list.length;
+  for (let k = 0; k < n; k++) if (!run.ans[k]) {
+    const x = run.list[k];
+    run.ans[k] = { x, r: { right: 0, total: rowsOf(x), wrong: [...Array(rowsOf(x)).keys()], skipped: true, given: null }, ok: false };
+  }
+  const ok = run.ans.filter(a => a.ok).length, sec = Math.round((Date.now() - run.t0) / 1000);
+  if (run.src !== 'miss' && run.src !== 'retry') progress(p => { p.exams.unshift({ d: Date.now(), n, ok, sec }); p.exams = p.exams.slice(0, 30); });
+  view('result');
+  missBadge();
+  const pct = Math.round(ok / n * 100);
+  $('rKick').textContent = run.src === 'miss' ? 'Работа над ошибками' : run.src === 'retry' ? 'Повтор ошибок' : 'Экзамен завершён';
+  $('rScore').textContent = `${ok} из ${n}`;
+  $('rLede').textContent = `${pct} % верно · ${fmtTime(sec)}` + (run.end && Date.now() >= run.end ? ' · время вышло' : '') +
+    (pct >= 85 ? ' · отличный результат.' : pct >= 70 ? ' · хорошо, разберите ошибки ниже.' : ' · стоит повторить главы с ошибками.');
+  const g = $('rGuide'); g.removeAttribute('viewBox'); drawGuides(); g.classList.toggle('happy', pct >= 70);
+  // По разделам; задачи тренажёра IPv4 — отдельной строкой в конце.
+  const per = {}, grp = x => isT(x) ? 0 : unitOf(x.ch);
+  for (const a of run.ans) { const u = grp(a.x); (per[u] ??= [0, 0])[1]++; if (a.ok) per[u][0]++; }
+  $('rUnits').innerHTML = Object.entries(per).sort((a, b) => (+a[0] || 99) - (+b[0] || 99)).map(([u, [r, t]]) =>
+    `<li style="--c:${+u ? unitColor(+u) : T_COLOR}"><span>${esc(+u ? BANK.units[u - 1][0] : 'Тренажёр')}</span><span class="n">${r} из ${t}</span><span class="bar"><i style="width:${r / t * 100}%"></i></span></li>`).join('');
+  const wrong = run.ans.filter(a => !a.ok).map(a => a.x);
+  $('bRetry').hidden = !wrong.length;
+  $('bRetry').textContent = `Повторить ошибки (${wrong.length})`;
+  $('bRetry').onclick = () => begin(shuffle([...wrong]), { show: 'now', time: 0, src: 'retry' });
+  $('rList').replaceChildren(...run.ans.map(reviewItem));
+}
+function reviewItem({ x, r, ok }, i) {
+  const li = h('li', 'rv ' + (ok ? 'good' : r.skipped ? 'bad skip' : 'bad'));
+  const chA = h('a', '', kickerOf(x)); chA.href = isT(x) ? '../trainer/' : lessonHref(x.ch);
+  li.append(h('div', 'rv-head', [h('span', 'mk', ok ? '✓' : r.skipped ? '—' : '✗'), h('span', '', `${i + 1}.`), chA, r.skipped ? h('span', '', 'нет ответа') : null]));
+  const q = h('p', 'rv-q');
+  if (isT(x)) q.innerHTML = x.t.stmt; else q.textContent = x.text;
+  li.append(q);
+  if (isT(x)) return trainerReview(li, x.t, r, ok);
+  if (x.img && !ok) { const im = h('img'); Object.assign(im, { src: 'img/' + x.img, alt: 'Схема к вопросу', loading: 'lazy' }); li.append(im); }
+  const link = (beat, text = 'Объяснение в уроке →') => { const a = h('a', 'lnk', text); a.href = lessonHref(x.ch, beat); return a; };
+  if (x.type === 'choice') {
+    if (!ok) li.append(h('p', 'yours', ['Ваш ответ: ', r.given ? h('s', '', r.given) : 'нет']));
+    li.append(h('p', 'right', ['Верно: ', x.opts[x.right]]));
+    if (!ok && r.sel >= 0 && x.no?.[r.sel]) li.append(h('p', 'why', x.no[r.sel]));
+    li.append(h('p', 'why', x.yes));
+    if (!ok && x.ex) li.append(link(x.ex));
+  } else {
+    const t = h('table', 'rows'), wrongSet = new Set(r.wrong || []);
+    const lab = k => x.cols?.find(c => c[0] === k)?.[1] ?? k;
+    const items = x.type === 'grid'
+      ? x.items.map((it, k) => [it.text, it.ans.map(lab).join(', '), it.why, k])
+      : x.rows.map((row, k) => [row.parts.filter(p => typeof p === 'string').join(' ').trim(), row.parts.filter(p => typeof p !== 'string').map(p => p.box).join(' / '), row.why, k]);
+    for (const [label, right, why, k] of items) {
+      const bad = wrongSet.has(k), given = r.given?.[k];
+      const tr = h('tr', bad ? 'no' : 'ok');
+      const exBeat = x.exRows?.[k] || x.ex;
+      tr.append(h('td', 'm', bad ? '✗' : '✓'),
+        h('td', '', [label || '', bad && why ? h('span', 'w', why) : null]),
+        h('td', '', [bad ? h(given ? 's' : 'span', 'y' + (x.type === 'typeIn' ? ' mono' : ''), given || 'нет ответа') : null, bad ? h('br') : null,
+          h('span', 'r' + (x.type === 'typeIn' ? ' mono' : ''), right)]),
+        h('td', '', bad && exBeat ? link(exBeat, 'где объясняется') : null));
+      t.append(tr);
+    }
+    li.append(t);
+  }
+  return li;
+}
+// Задача тренажёра в разборе: ответы по полям; при ошибке — решение по шагам и приём в уроке.
+function trainerReview(li, t, r, ok) {
+  if (t.choice) {
+    if (!ok) li.append(h('p', 'yours', ['Ваш ответ: ', r.given ? h('s', '', r.given) : 'нет']));
+    li.append(h('p', 'right', ['Верно: ', t.choice.opts[t.choice.right]]));
+  } else {
+    const tb = h('table', 'rows'), bad = new Set(r.wrong || []);
+    t.fields.forEach((f, k) => {
+      const no = bad.has(k), given = r.given?.[k];
+      tb.append(h('tr', no ? 'no' : 'ok', [h('td', 'm', no ? '✗' : '✓'), h('td', '', f.label),
+        h('td', '', [no ? h(given ? 's' : 'span', 'y mono', given || 'нет ответа') : null, no ? h('br') : null, h('span', 'r mono', IPV4.showAns(f.kind, f.ans))])]));
+    });
+    li.append(tb);
+  }
+  if (!ok) li.append(solution(t), lessonLink(t));
+  return li;
+}
+
+$('bStart').onclick = () => {
+  const p = pool().filter(x => x.exam);
+  if (!p.length) return;
+  if (set.src === 'miss') begin(shuffle(p), { show: 'now', time: 0, src: 'miss' });
+  else begin(shuffle(p).slice(0, set.n), { show: set.show, time: set.time, src: set.src });
+};
+$('bStop').onclick = () => { if (run.ans.filter(Boolean).length || confirm('Завершить без ответов?')) finish(); };
+$('bNew').onclick = () => { view('setup'); refresh(); };
+// Щелчок мышью не оставляет фокус на вариантах — Enter по-прежнему отвечает.
+document.addEventListener('mousedown', e => { if (e.target.closest('.opt, .seg button, .chip')) e.preventDefault(); });
+document.addEventListener('keydown', e => {
+  if (e.altKey || e.ctrlKey || e.metaKey) return;
+  if (state === 'setup') {
+    if (e.key === 'Enter' && !e.target.closest('button, a, input')) { e.preventDefault(); $('bStart').click(); }
+    return;
+  }
+  if (state !== 'ask' && state !== 'shown') return;
+  if (e.target.matches('input')) { if (e.key === 'Enter') { e.preventDefault(); submit(); } return; }
+  if (e.key === 'Enter' && !e.target.closest('button, a')) { e.preventDefault(); submit(); return; }
+  if (state === 'ask' && ui.key?.(e)) e.preventDefault();
+});
+refresh();
+view('setup');
+if (MODE === 'miss' && pool().some(x => x.exam)) $('bStart').click();
+</script>
+</body>
+</html>

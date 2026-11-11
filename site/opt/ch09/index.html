@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ЛР2: результаты и выводы</title>
+<link rel="stylesheet" href="../lib/engine.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/opt.css">
+<link rel="expect" href="#bar" blocking="render">
+</head>
+<body>
+<script src="../lib/engine.js"></script>
+<script src="../lib/math.js"></script>
+<script src="../lib/board.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/opt.js"></script>
+<script src="audio/ru/timings.js"></script>
+<script>
+'use strict';
+const CHAPTER = { number: 9, title: 'ЛР2: результаты, сравнение и выводы', minutes: 11, language: 'ru' };
+// Таблица 4 отчёта ЛР2 (совпадает с прогоном lab2_var21.py).
+const E9 = ['0,1', '0,01', '0,002', '0,001', '0,0001', '0,00001'];
+const TG9 = [14, 20, 22, 28, 32, 40], BR9 = [8, 8, 9, 9, 10, 10];
+
+// Листинг lab2_var21.py, строки 1–47 и 124–150 (как в отчёте).
+const L9A = [
+  'import math',
+  '',
+  '# вариант 21: f(x) = 5x^2 * e^(-x/2) -> max на [2, 6], точность 0.002',
+  '# максимум f = минимум функции phi(x) = -f(x), её и минимизируем',
+  'a0 = 2.0',
+  'b0 = 6.0',
+  'eps = 0.002',
+  '',
+  '',
+  'def f(x):',
+  '    return 5 * x * x * math.exp(-x / 2)',
+  '',
+  '',
+  'def phi(x):',
+  '    return -f(x)',
+  '',
+  '',
+  'def dphi(x):',
+  "    # phi'(x) = -5e^(-x/2) * (2x - x^2/2)",
+  '    return -5 * math.exp(-x / 2) * (2 * x - x * x / 2)',
+  '',
+  '',
+  '# ---------- метод 3: касательных ----------',
+  '# в концах отрезка строим касательные к phi, т.к. phi выпуклая,',
+  '# они лежат ниже графика; их пересечение c - новая пробная точка',
+  'def tangents(a, b, eps, log=None):',
+  '    fa, da = phi(a), dphi(a)',
+  '    fb, db = phi(b), dphi(b)',
+  "    cnt = 4                       # счётчик вычислений phi и phi'",
+  '    it = 0',
+  '    while True:',
+  '        it += 1',
+  '        # точка пересечения касательных в a и в b',
+  '        c = (fb - fa + da * a - db * b) / (da - db)',
+  '        fc, dc = phi(c), dphi(c)',
+  '        cnt += 2',
+  '        if log is not None:',
+  '            log.append((it, a, b, c, fc, dc))',
+  '        if abs(dc) <= eps or b - a <= eps:',
+  '            break',
+  '        if dc > 0:',
+  '            # функция растёт в c -> минимум левее, выкидываем [c, b]',
+  '            b, fb, db = c, fc, dc',
+  '        else:',
+  '            # функция убывает в c -> минимум правее, выкидываем [a, c]',
+  '            a, fa, da = c, fc, dc',
+  '    return c, -fc, it, cnt',
+];
+const L9B = [
+  '# ---------- запуск ----------',
+  'print("точное решение: x = 4, f =", 80 * math.exp(-2))',
+  'print()',
+  '',
+  'names = ["касательных", "Брент"]',
+  'funcs = [tangents, brent]',
+  '',
+  'for name, method in zip(names, funcs):',
+  '    x, fx, it, cnt = method(a0, b0, eps)',
+  '    print(f"{name:12} итераций: {it:3}  вычислений: {cnt:3}  x = {x:.6f}  f = {fx:.10f}"',
+  '          f"  погрешность x: {abs(x - 4):.2e}")',
+  '',
+  'print("\\nитерации метода касательных:")',
+  'log = []',
+  'tangents(a0, b0, eps, log)',
+  'for row in log:',
+  '    print("%2d  a=%.6f  b=%.6f  c=%.6f  phi(c)=%.8f  phi\'(c)=%+.6f" % row)',
+  '',
+  'print("\\nитерации Брента:")',
+  'log = []',
+  'brent(a0, b0, eps, log)',
+  'for row in log:',
+  '    print("%2d  u=%.6f  phi\'(u)=%+.8f  %-12s  корень в [%.6f, %.6f]" % row)',
+  '',
+  'print("\\nсколько раз считали phi и phi\' при разных eps:")',
+  'for e in [0.1, 0.01, 0.002, 0.001, 0.0001, 0.00001]:',
+  '    print(e, [method(a0, b0, e)[3] for method in funcs])',
+];
+const b9src = (from, to) => from >= 124 ? L9B.slice(from - 124, to - 123) : L9A.slice(from - 1, to);
+// Листинг с подсветкой: hl = [[от, до, метка], ...]; подсветка гаснет на следующей метке.
+function b9code(p, from, to, hl, m, o = {}) {
+  const cb = codeBlock(p, b9src(from, to), o.x ?? 96, o.y ?? 130, o.t0 ?? .3, { first: from, size: o.size ?? 19, w: o.w ?? 860 });
+  hl.forEach(([a, b, k], i) => { const r = codeHl(cb, a, b, m(k)); if (hl[i + 1] && !o.keep) hide(r, m(hl[i + 1][2]), .3); });
+  return cb;
+}
+const b9note = (p, s, y, t, o = {}) => para(p, s, o.x ?? 1000, y, t, { w: o.w ?? 540, size: o.size ?? 25, fill: o.fill ?? COL.chalk, weight: o.weight ?? 500 });
+// Карточка метода с числом вычислений (итог по двум работам).
+function b9chip(p, x, y, num, name, color, t0) {
+  const g = G(p, { o: 0 });
+  mk('rect', { x: x - 130, y: y - 70, width: 260, height: 140, rx: 18, fill: mix(COL.board, color, .14), stroke: color, 'stroke-width': 3 }, g);
+  T(g, num, { x, y: y + 10, size: 58, fill: color, anchor: 'middle', weight: 700, font: MONO });
+  T(g, name, { x, y: y + 52, size: 22, fill: COL.chalk, anchor: 'middle', weight: 600 });
+  show(g, t0);
+  return g;
+}
+
+const BEATS = [
+  ['intro', 'Глава 9', (m, D) => introCard(m, D, 'ЛР2 · Глава 9', 'ЛР2: результаты,\nсравнение и выводы', 'GenAI · программа · таблицы 3 и 4 · выводы · итог по двум работам')],
+
+  ['genai', 'GenAI', (m) => {
+    const p = panel(0);
+    kick(p, '9.1 · Использование систем генеративного ИИ (§3 отчёта)');
+    tagL(p, 'инструмент', 96, 190, COL.whole, m('tool'), { size: 26, solid: true });
+    say(p, 'Claude Opus 5.5 (Anthropic), claude.ai и Claude Code', 300, 199, m('tool') + .3, { size: 30 });
+    tagL(p, 'задачи', 96, 300, COL.task, m('tasks'), { size: 26, solid: true });
+    para(p, 'помощь в написании программы на Python, построение графика функции, составление таблиц по результатам вычислений и оформление отчёта', 300, 300, m('tasks') + .3, { w: 1200, size: 28 });
+    tagL(p, 'доработки студента', 96, 450, COL.good, m('own'), { size: 26, solid: true });
+    [['сверка алгоритмов с лекциями', 'o1'],
+      ['самостоятельный вывод аналитического решения и проверка выпуклости функции на отрезке', 'o2'],
+      ['проверка результатов программы вручную на первых итерациях', 'o3'],
+      ['запуск программы при разных ε', 'o4'],
+      ['формулировка выводов', 'o5']].forEach(([s, k], i) => item(p, i + 1, s, 530 + i * 62, m(k), { size: 27, x: 130, color: COL.good }));
+    say(p, 'инструмент · задачи · свои доработки', 800, 860, m('sum'), { size: 26, fill: COL.dim, anchor: 'middle', weight: 600 });
+  }],
+
+  ['prog1', 'Программа: функции', (m) => {
+    const p = panel(0);
+    kick(p, '9.2 · Программа (§7): данные, f, φ и φ′ — строки 1–20');
+    b9code(p, 1, 20, [[5, 7, 'l5'], [10, 11, 'l10'], [14, 15, 'l14'], [18, 20, 'l18']], m, { y: 140, size: 19, w: 880 });
+    b9note(p, '«Каждый метод сам считает, сколько раз вычислялись функция и её производная, и возвращает это число вместе с ответом и числом итераций».', 160, .6, { fill: COL.dim, size: 24 });
+    b9note(p, 'отрезок [2; 6], ε = 0,002', 380, m('l5'));
+    tex(p, 'f(x)=5x^2e^{-x/2}', 1000, 440, m('l10'), { size: 34 });
+    tex(p, '\\varphi(x)=-f(x)', 1000, 530, m('l14'), { size: 34 });
+    b9note(p, 'max f = −min φ, точка одна', 600, m('l14') + .5, { fill: COL.dim, size: 24 });
+    tex(p, '\\varphi\'(x)=-5e^{-x/2}\\Big(2x-\\dfrac{x^2}{2}\\Big)', 1000, 650, m('l18'), { size: 32, color: OC.d });
+    tag(p, 'вызовы φ и φ′ считают сами методы', 1270, 810, COL.task, m('both'), { size: 24, solid: true });
+  }],
+
+  ['prog2', 'Две функции и счётчики', (m) => {
+    const p = panel(0);
+    kick(p, '9.3 · tangents и brent: каждая считает вычисления и возвращает (x, f, it, cnt)');
+    b9code(p, 26, 47, [[27, 29, 't27'], [35, 36, 't35'], [47, 47, 't47']], m, { y: 130, size: 17, w: 760, keep: true });
+    tex(p, '\\text{cnt}=4+2\\cdot\\text{it}\\quad(9\\to22)', 110, 740, m('tf'), { size: 34, color: OC.tan });
+    say(p, 'brent', 920, 150, m('b56') - .3, { size: 26, fill: OC.par, weight: 700, font: MONO });
+    const s1 = codeBlock(p, ['    fa, fb = dphi(a), dphi(b)', '    cnt = 2'], 920, 180, m('b56'), { first: 56, size: 19, w: 620 });
+    codeHl(s1, 56, 57, m('b56') + .3, { color: OC.par });
+    const s2 = codeBlock(p, ['        fb = dphi(b)', '        cnt += 1'], 920, 330, m('b108'), { first: 108, size: 19, w: 620 });
+    codeHl(s2, 108, 109, m('b108') + .3, { color: OC.par });
+    const s3 = codeBlock(p, ['    return b, f(b), it, cnt + 1'], 920, 480, m('b121'), { first: 121, size: 19, w: 620 });
+    codeHl(s3, 121, 121, m('b121') + .3, { color: OC.par });
+    say(p, '2 производные на концах', 940, 300, m('b56') + .6, { size: 22, fill: COL.dim });
+    say(p, 'одна φ′ на итерацию', 940, 450, m('b108') + .6, { size: 22, fill: COL.dim });
+    say(p, '+1 за вычисление f(b)', 940, 560, m('b121') + .6, { size: 22, fill: COL.dim });
+    tex(p, '\\text{cnt}=2+\\text{it}+1\\quad(6\\to9)', 920, 610, m('bf'), { size: 34, color: OC.par });
+    tag(p, 'обе возвращают: x, f, итерации, вычисления', 800, 840, COL.good, m('same'), { size: 28, solid: true });
+  }],
+
+  ['prog3', 'Запуск', (m) => {
+    const p = panel(0);
+    kick(p, '9.4 · Запуск (строки 124–150): откуда таблицы 1–4');
+    b9code(p, 124, 150, [[125, 125, 'l125'], [131, 134, 'l131'], [136, 140, 'l136'], [142, 146, 'l142'], [148, 150, 'l148']], m, { x: 80, y: 120, size: 16, w: 960, keep: true });
+    const dy = 16 * 1.42, Y = n => 120 + (n - 124) * dy + dy * .7;
+    [['эталон: x = 4, f = 80e⁻²', 125, 'l125', COL.good], ['→ таблица 3', 132, 'l131', COL.task], ['→ таблица 1', 138, 'l136', OC.tan], ['→ таблица 2', 144, 'l142', OC.par], ['→ таблица 4', 149, 'l148', COL.task]]
+      .forEach(([s, n, k, c]) => tagL(p, s, 1070, Y(n), c, m(k), { size: 22, solid: true }));
+    const out = ['точное решение: x = 4, f = 10.8268226589…', 'касательных  итераций:   9  вычислений:  22', 'Брент        итераций:   6  вычислений:   9', '…', '0.002 [22, 9]'];
+    say(p, 'вывод программы (фрагмент)', 80, 770, m('out'), { size: 22, fill: COL.dim, weight: 600 });
+    out.forEach((s, i) => say(p, s, 80 + (i > 2 ? 760 : 0), 806 + (i > 2 ? (i - 3) * 30 : i * 30) - (i > 2 ? 0 : 0), m('out') + .3 + i * .2, { size: 20, font: MONO, fill: COL.chalk }));
+  }],
+
+  ['q1', 'Проверка: функции', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    codeBlock(p, b9src(26, 36), 96, 150, .3, { first: 26, size: 18, w: 820 });
+    codeBlock(p, ['    return c, -fc, it, cnt'], 96, 500, .5, { first: 47, size: 18, w: 820 });
+    codeBlock(p, ['    return b, f(b), it, cnt + 1'], 96, 590, .6, { first: 121, size: 18, w: 820 });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-ret', prompt: ['Что возвращают функции tangents и brent?'],
+    build: choice(['x, f(x), число итераций, число вычислений', 'x и φ(x)', 'концы итогового отрезка', 'только число итераций'], 0,
+      'В отчёте: каждый метод возвращает число вычислений вместе с ответом и числом итераций.',
+      [null, 'Возвращается f = −φ и ещё два числа.', 'Отрезки печатаются только в log для таблиц 1–2.', 'Ещё ответ и число вычислений.']),
+  }, {
+    id: 'c-cnt', prompt: ['Сколько вычислений насчитает каждая функция, если она сделала 5 итераций?'],
+    build: numIn([{ parts: ['tangents: ', { num: 14, tol: 0, d: 0, w: 5 }], why: '4 + 2·5 = 14 (таблица 4, ε = 0,1).' },
+      { parts: ['brent: ', { num: 8, tol: 0, d: 0, w: 5 }], why: '2 + 5 + 1 = 8 (таблица 4, ε = 0,1).' }]),
+  }], done) }],
+
+  ['table3', 'Таблица 3', (m) => {
+    const p = panel(0);
+    kick(p, '9.5 · Таблица 3 — сравнение методов при ε = 0,002');
+    const tb = table(p, { x: 100, y: 170, cols: [['метод', 290], ['вычислений f и φ′', 240], ['итераций', 150], ['x', 170], ['f', 180], ['|x − x*|', 180], ['|f − f*|', 180]], rh: 66, size: 28, t0: .4, mono: [1, 2, 3, 4] });
+    tb.row(['Метод касательных', '22', '9', '4,000764', '10,826822', '7,64·10⁻⁴', '3,95·10⁻⁷'], m('tan'), { color: COL.chalk });
+    tb.row(['Метод Брента', '9', '6', '4,000306', '10,826823', '3,06·10⁻⁴', '6,32·10⁻⁸'], m('br'));
+    tb.hl(0, OC.tan, m('tan')); tb.hl(1, OC.par, m('br'));
+    const [ex, ey] = tb.cellBox(0, 5);
+    halo(p, ex - 6, ey, 372, 132, COL.task, m('errs'));
+    // столбики «вычислений»
+    const X0 = 330, S = 34;
+    [['касательные', 22, OC.tan, m('win')], ['Брент', 9, OC.par, m('win') + .5]].forEach(([s, v, c, t], i) => {
+      const y = 480 + i * 90;
+      say(p, s, X0 - 20, y + 30, t, { size: 26, anchor: 'end', fill: c, weight: 600 });
+      const r = put(mk('rect', { x: X0, y, width: v * S, height: 44, rx: 8, fill: c }, p), { o: 0 }); show(r, t);
+      say(p, String(v), X0 + v * S + 14, y + 32, t + .2, { size: 28, font: MONO, fill: c, weight: 700 });
+    });
+    say(p, 'вычислений f и φ′', X0, 460, m('win'), { size: 22, fill: COL.dim });
+    tag(p, 'Брент лучше по всем столбцам', 1300, 700, COL.good, m('win') + 1, { size: 26, solid: true });
+  }],
+
+  ['err', 'Погрешности', (m) => {
+    const p = panel(0);
+    kick(p, '9.6 · Как получены погрешности таблицы 3');
+    say(p, 'по x: эталон x* = 4', 110, 170, m('dx'), { size: 26, fill: COL.dim, weight: 600 });
+    texRows(p, ['|4{,}000764-4|=7{,}64\\cdot10^{-4}', '|4{,}000306-4|=3{,}06\\cdot10^{-4}'], 110, 195, [m('dx') + .5, m('dx') + 5], { size: 32, dy: 66, color: [OC.tan, OC.par] });
+    say(p, 'по f: эталон f* = 80e⁻² ≈ 10,8268226589', 110, 400, m('df'), { size: 26, fill: COL.dim, weight: 600 });
+    texRows(p, ['|10{,}8268222641-f^*|=3{,}95\\cdot10^{-7}', '|10{,}8268225957-f^*|=6{,}32\\cdot10^{-8}'], 110, 425, [m('df') + .5, m('df') + 6], { size: 32, dy: 66, color: [OC.tan, OC.par] });
+    legend(p, 'касательные', '', 110, 650, OC.tan, m('dx') + .5, { mono: false });
+    legend(p, 'Брент', '', 330, 650, OC.par, m('dx') + 5, { mono: false });
+    say(p, 'почему |f − f*| намного меньше?', 900, 170, m('why'), { size: 28, fill: COL.task, weight: 700 });
+    para(p, 'Около максимума график почти горизонтальный:', 900, 220, m('why') + .5, { w: 640, size: 26 });
+    tex(p, 'f^*-f\\approx\\tfrac12\\,|f\'\'(4)|\\,(x-x^*)^2', 900, 270, m('why') + 3, { size: 34 });
+    tex(p, 'f\'\'(4)=-10e^{-2}\\approx-1{,}353', 900, 400, m('f2'), { size: 34, color: COL.dim });
+    tex(p, '\\tfrac12\\cdot1{,}353\\cdot(7{,}64\\cdot10^{-4})^2\\approx3{,}95\\cdot10^{-7}', 900, 520, m('chk'), { size: 30, color: OC.tan });
+    tag(p, 'совпадает с таблицей 3', 1220, 660, COL.good, m('chk') + 4, { size: 26, solid: true });
+  }],
+
+  ['table4', 'Таблица 4', (m) => {
+    const p = panel(0);
+    kick(p, '9.7 · Таблица 4 — число вычислений функции и производной при разных ε');
+    const tb = table(p, { x: 110, y: 170, cols: [['ε', 190], ['касательные', 210], ['Брент', 150]], rh: 62, size: 30, t0: m('tbl'), mono: [0, 1, 2] });
+    E9.forEach((e, i) => tb.row([e, String(TG9[i]), String(BR9[i])], m('tbl') + .3 + i * .5));
+    tb.hl(2, COL.task, m('tbl') + 3.5);
+    const X0 = 760, Y0 = 205, S = 17;
+    E9.forEach((e, i) => {
+      const y = Y0 + i * 76;
+      T(p, e, { x: X0 - 10, y: y + 22, size: 20, fill: COL.dim, anchor: 'end', font: MONO });
+      const r1 = put(mk('rect', { x: X0, y, width: TG9[i] * S, height: 26, rx: 5, fill: OC.tan }, p), { o: 0 });
+      const r2 = put(mk('rect', { x: X0, y: y + 30, width: BR9[i] * S, height: 26, rx: 5, fill: OC.par }, p), { o: 0 });
+      show(r1, m('tbl') + .5 + i * .3); show(r2, m('tbl') + 3 + i * .3);
+      say(p, String(TG9[i]), X0 + TG9[i] * S + 10, y + 22, m('tbl') + .5 + i * .3, { size: 20, fill: OC.tan, font: MONO });
+      say(p, String(BR9[i]), X0 + BR9[i] * S + 10, y + 52, m('tbl') + 3 + i * .3, { size: 20, fill: OC.par, font: MONO });
+    });
+    legend(p, 'касательные', '', 760, 160, OC.tan, m('tbl'), { mono: false });
+    legend(p, 'Брент', '', 980, 160, OC.par, m('tbl') + 3, { mono: false });
+    say(p, 'ε : 10  ⇒  +2–4 итерации = +4–8 вычислений', 110, 680, m('tan'), { size: 28, fill: OC.tan, weight: 600 });
+    say(p, 'отрезок ≈ в 2 раза за итерацию — сходимость линейная', 110, 735, m('lin'), { size: 28, fill: OC.tan });
+    say(p, 'Брент: от 0,1 до 0,00001 — всего 8 → 10', 110, 800, m('br'), { size: 28, fill: OC.par, weight: 600 });
+    para(p, 'около корня интерполяция сразу даёт очень точную точку', 1000, 740, m('why'), { w: 540, size: 24, fill: COL.dim });
+  }],
+
+  ['q2', 'Проверка: свойства', () => { const p = panel(0); kick(p, 'Проверка'); }, { ask: done => quiz(WIDE, [{
+    id: 'c-which', prompt: ['Какому методу ЛР2 принадлежит свойство (по выводам отчёта)?'],
+    build: grid([
+      { parts: ['на каждой итерации нужны и φ, и φ′'], ans: ['t'], why: 'Касательные: φ(c) и φ′(c), 2 вычисления за итерацию.' },
+      { parts: ['нужны только значения производной'], ans: ['b'], why: 'Брент ищет корень φ′; f — один раз в ответе.' },
+      { parts: ['точка пересечения касательных не уходит за отрезок'], ans: ['t'], why: 'Так как φ′(a) < 0 < φ′(b), c всегда внутри [a; b].' },
+      { parts: ['деление пополам подстраховывает неудачную интерполяцию'], ans: ['b'], why: 'Это страховка метода Брента.' },
+      { parts: ['сходимость линейная: +4–8 вычислений на каждое ε : 10'], ans: ['t'], why: 'Таблица 4: 14, 20, 22, 28, 32, 40.' },
+      { parts: ['при ε = 0,00001 нужно 10 вычислений'], ans: ['b'], why: 'У касательных — 40.' },
+    ], [['t', 'касательные', OC.tan, '1'], ['b', 'Брент', OC.par, '2']], { multi: false, text: true }),
+  }], done) }],
+
+  ['concl', 'Выводы', (m) => {
+    const p = panel(0);
+    kick(p, '9.8 · Выводы (§10 отчёта)');
+    const rows = [['задача', COL.whole, 'v1', 'Максимум сведён к минимизации φ(x) = −5x²e^(−x/2), выпуклой на [2; 6]. x* = 4, f(x*) = 80e⁻² ≈ 10,826823. Оба метода нашли точку с точностью лучше ε = 0,002.'],
+      ['касательные', OC.tan, 'v2', 'Простой метод; точка пересечения касательных всегда внутри отрезка — за границы он не уйдёт.'],
+      ['', OC.tan, 'v2b', 'Но на итерации нужны и φ, и φ′, сходимость линейная: 9 итераций, 22 вычисления.'],
+      ['Брент', OC.par, 'v3', 'Лучше: 6 итераций и 9 вычислений, погрешность по x 3,06·10⁻⁴ против 7,64·10⁻⁴. Нужна только φ′; интерполяция — быстро, деление пополам — подстраховка.'],
+      ['точность', COL.task, 'v4', 'Чем выше нужная точность, тем больше выигрыш: при ε = 0,00001 — 10 вычислений против 40.']];
+    const Y = [170, 330, 430, 540, 720];
+    rows.forEach(([k, c, mk_, s], i) => {
+      if (k) tagL(p, k, 96, Y[i] + 4, c, m(mk_), { size: 24, solid: true });
+      para(p, s, 330, Y[i] + 12, m(mk_) + .2, { w: 1200, size: 28 });
+    });
+  }],
+
+  ['both', 'Итог по двум работам', (m) => {
+    const p = panel(0);
+    kick(p, '9.9 · Итог по обеим лабораторным: число вычислений');
+    say(p, 'ЛР1 · min x − 2ln x на [1; 4], ε = 0,0005', 110, 200, m('l1'), { size: 28, fill: COL.dim, weight: 600 });
+    b9chip(p, 330, 330, '6001', 'равномерный поиск', COL.whole, m('u'));
+    arrowTo(p, 480, 330, 590, 330, COL.dim, m('g') - .2);
+    b9chip(p, 740, 330, '21', 'золотое сечение', COL.task, m('g'));
+    arrowTo(p, 890, 330, 1000, 330, COL.dim, m('b1') - .2);
+    b9chip(p, 1150, 330, '9', 'метод Брента', OC.par, m('b1'));
+    say(p, 'ЛР2 · max 5x²e^(−x/2) на [2; 6], ε = 0,002', 110, 520, m('l2'), { size: 28, fill: COL.dim, weight: 600 });
+    b9chip(p, 330, 650, '22', 'метод касательных', OC.tan, m('t'));
+    arrowTo(p, 480, 650, 1000, 650, COL.dim, m('b2') - .2);
+    b9chip(p, 1150, 650, '9', 'метод Брента', OC.par, m('b2'));
+    tag(p, 'в обеих работах лучший — метод Брента', 800, 800, COL.good, m('same'), { size: 28, solid: true });
+    say(p, 'числа — из таблиц отчётов ЛР1 (табл. 2) и ЛР2 (табл. 3)', 800, 860, m('end'), { size: 22, fill: COL.dim, anchor: 'middle' });
+  }],
+
+  ['sum', 'Главное', (m) => {
+    const p = panel(0);
+    wrapList(p, [['Программа: φ, φ′ и две функции; каждая считает вычисления и возвращает (x, f, итерации, вычисления).', 'w1'],
+      ['Таблица 3: касательные 22 / 9, Брент 9 / 6; погрешность по x у Брента меньше (3,06·10⁻⁴ против 7,64·10⁻⁴).', 'w2'],
+      ['Таблица 4: касательные 14 → 40 (линейно), Брент 8 → 10.', 'w3'],
+      ['Итог: ЛР1 6001 → 21 → 9, ЛР2 22 → 9.', 'w4']], m, { size: 30, dy: 145 });
+  }],
+
+  ['final1', 'Практика 1', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-it', prompt: ['По таблице 4 и счётчикам из кода (tangents: cnt = 4 + 2·it, brent: cnt = 2 + it + 1) найдите число итераций.'],
+    build: numIn([{ parts: ['касательные, ε = 0,001 (28 вычислений): ', { num: 12, tol: 0, d: 0, w: 5 }], why: '28 = 4 + 2·12.' },
+      { parts: ['касательные, ε = 0,00001 (40 вычислений): ', { num: 18, tol: 0, d: 0, w: 5 }], why: '40 = 4 + 2·18.' },
+      { parts: ['Брент, ε = 0,0001 (10 вычислений): ', { num: 7, tol: 0, d: 0, w: 5 }], why: '10 = 2 + 7 + 1.' }]),
+  }], done, 'Практика главы   1 из 3') }],
+
+  ['final2', 'Практика 2', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-err', prompt: ['Метод Брента: x = 4,000306, f = 10,8268225957; эталон x* = 4, f* = 10,8268226589. Найдите погрешности и проверьте оценку ½·|f″(4)|·(x − x*)² при f″(4) ≈ −1,353.'],
+    build: numIn([{ parts: ['|x − x*| = ', { num: 0.000306, tol: 1e-6 }], why: '4,000306 − 4 = 0,000306 = 3,06·10⁻⁴.' },
+      { parts: ['|f − f*| = ', { num: 6.32, tol: .02, d: 2, w: 6 }, ' · 10⁻⁸'], why: '10,8268226589 − 10,8268225957 = 0,0000000632.' },
+      { parts: ['оценка ½·1,353·(3,06·10⁻⁴)² = ', { num: 6.33, tol: .06, d: 2, w: 6 }, ' · 10⁻⁸'], why: '0,6765·9,36·10⁻⁸ ≈ 6,33·10⁻⁸ — почти как в таблице.' }]),
+  }], done, 'Практика главы   2 из 3') }],
+
+  ['final3', 'Практика 3', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-ratio', prompt: ['Во сколько раз метод Брента экономнее по числу вычислений (данные таблиц отчётов)?'],
+    build: numIn([{ parts: ['ЛР2, ε = 0,002 (22 и 9): ', { num: 22 / 9, tol: .01, d: 2, w: 6 }], why: '22/9 ≈ 2,44.' },
+      { parts: ['ЛР2, ε = 0,00001 (40 и 10): ', { num: 4, tol: .01, d: 2, w: 6 }], why: '40/10 = 4 — выигрыш растёт с точностью.' },
+      { parts: ['ЛР1, золотое сечение и Брент (21 и 9): ', { num: 21 / 9, tol: .01, d: 2, w: 6 }], why: '21/9 ≈ 2,33.' }]),
+  }], done, 'Практика главы   3 из 3') }],
+
+  ['finish', 'Финиш', () => { panel(0); }, { ask: finishCard }],
+].map(([id, title, run, extra]) => ({ id, title, run, ...extra }));
+
+boot();
+</script>
+</body>
+</html>

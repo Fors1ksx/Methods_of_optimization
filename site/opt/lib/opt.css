@@ -1,0 +1,4 @@
+/* Учебник МО: KaTeX на доске */
+foreignObject .katex { font-size: 1em; }
+foreignObject div { font-family: "Iowan Old Style", Palatino, Georgia, serif; }
+.card .katex { font-size: 1.05em; }

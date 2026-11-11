@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Метод Брента (ЛР2)</title>
+<link rel="stylesheet" href="../lib/engine.css">
+<link rel="stylesheet" href="../lib/katex/katex.min.css">
+<link rel="stylesheet" href="../lib/opt.css">
+<link rel="expect" href="#bar" blocking="render">
+</head>
+<body>
+<script src="../lib/engine.js"></script>
+<script src="../lib/math.js"></script>
+<script src="../lib/board.js"></script>
+<script src="../lib/katex/katex.min.js"></script>
+<script src="../lib/methods.js"></script>
+<script src="../lib/opt.js"></script>
+<script src="audio/ru/timings.js"></script>
+<script>
+'use strict';
+const CHAPTER = { number: 8, title: 'Метод Брента (ЛР2)', minutes: 13, language: 'ru', next: '../ch09/' };
+const dphi = OPT.FN.phi2.df;
+const RB = runM('brentRoot', 'phi2');               // ровно brent() из lab2_var21.py: 6 итераций, 9 вычислений
+const ROWS = RB.steps.slice(1).map(s => s.row);       // [k, u, φ′(u), шаг, корень от, до] — таблица 2 отчёта
+const b8f = (v, d = 6) => v.toFixed(d).replace('.', ',').replace('-', '−');
+const b8s = (v, d = 8) => (v > 0 ? '+' : '') + b8f(v, d);
+const B8K = { 'секущая': OC.x1, 'интерполяция': OC.par, 'бисекция': OC.bad };
+
+// Листинг brent() из отчёта ЛР2, строки 55–121 (lab2_var21.py).
+const B8SRC = [
+  'def brent(a, b, eps, log=None):',
+  '    fa, fb = dphi(a), dphi(b)',
+  '    cnt = 2',
+  '    it = 0',
+  '    if fa * fb > 0:',
+  '        raise ValueError("на концах производная одного знака")',
+  '    if abs(fa) < abs(fb):',
+  '        a, b, fa, fb = b, a, fb, fa',
+  '    c, fc = a, fa',
+  '    d = e = b - a',
+  '    while True:',
+  '        tol = eps / 2',
+  '        m = (c - b) / 2               # половина отрезка, где лежит корень',
+  '        if abs(m) <= tol or fb == 0:',
+  '            break',
+  '        it += 1',
+  '        step = "бисекция"',
+  '        if abs(e) >= tol and abs(fa) > abs(fb):',
+  '            s = fb / fa',
+  '            if a == c:',
+  '                # всего две разные точки -> секущая',
+  '                p = 2 * m * s',
+  '                q = 1 - s',
+  '                kind = "секущая"',
+  '            else:',
+  '                # три разные точки -> обратная квадратичная интерполяция',
+  '                q = fa / fc',
+  '                r = fb / fc',
+  '                p = s * (2 * m * q * (q - r) - (b - a) * (r - 1))',
+  '                q = (q - 1) * (r - 1) * (s - 1)',
+  '                kind = "интерполяция"',
+  '            if p > 0:',
+  '                q = -q',
+  '            else:',
+  '                p = -p',
+  '            # берём интерполяцию, только если точка внутри отрезка',
+  '            # и шаг меньше половины позапрошлого',
+  '            if 2 * p < min(3 * m * q - abs(tol * q), abs(e * q)):',
+  '                e = d',
+  '                d = p / q',
+  '                step = kind',
+  '            else:',
+  '                d = m',
+  '                e = m',
+  '        else:',
+  '            d = m',
+  '            e = m',
+  '        a, fa = b, fb',
+  '        # совсем маленький шаг смысла не имеет, делаем хотя бы tol',
+  '        if abs(d) > tol:',
+  '            b += d',
+  '        else:',
+  '            b += tol if m > 0 else -tol',
+  '        fb = dphi(b)',
+  '        cnt += 1',
+  '        u, fu = b, fb                 # новая точка (для таблицы)',
+  '        # корень должен оставаться между b и c',
+  '        if (fb > 0) == (fc > 0):',
+  '            c, fc = a, fa',
+  '            d = e = b - a',
+  '        if abs(fc) < abs(fb):',
+  '            a, b, c = b, c, b',
+  '            fa, fb, fc = fb, fc, fb',
+  '        if log is not None:',
+  '            log.append((it, u, fu, step, min(b, c), max(b, c)))',
+  '    # плюс одно вычисление самой функции в найденной точке для ответа',
+  '    return b, f(b), it, cnt + 1',
+];
+const b8lines = (from, to) => B8SRC.slice(from - 55, to - 54);
+// Листинг с подсветкой: hl = [[от, до, метка], ...]; подсветка гаснет на следующей метке.
+function b8code(p, from, to, hl, m, o = {}) {
+  const cb = codeBlock(p, b8lines(from, to), o.x ?? 96, o.y ?? 120, .3, { first: from, size: o.size ?? 19, w: o.w ?? 860 });
+  hl.forEach(([a, b, k], i) => { const r = codeHl(cb, a, b, m(k)); if (hl[i + 1]) hide(r, m(hl[i + 1][2]), .3); });
+  return cb;
+}
+// Заметка справа от листинга (появляется на метке).
+const b8note = (p, s, y, t, o = {}) => para(p, s, o.x ?? 990, y, t, { w: o.w ?? 560, size: o.size ?? 25, fill: o.fill ?? COL.chalk, weight: o.weight ?? 500 });
+
+// График φ′ на [2; 6] с пунктиром нуля.
+function b8zero(Gr, t0) {
+  const l = path(Gr.layer, `M${Gr.PX(Gr.xs[0])} ${Gr.PY(0)}H${Gr.PX(Gr.xs[1])}`, { stroke: COL.dim, 'stroke-width': 2.5, 'stroke-dasharray': '3 7' }, { o: 0 });
+  show(l, t0);
+  return l;
+}
+function b8GD(p, o = {}) {
+  const g = graph(p, dphi, { x0: 120, y0: 800, w: 800, h: 560, xs: [2, 6, .5], ys: [-4, 2, 1], yl: 'φ′(x)', color: OC.d, ...o });
+  b8zero(g, (o.t0 ?? .2) + .4);
+  return g;
+}
+// Прямая через две точки графика φ′ (секущая), на всю ширину; возвращает её корень и линию.
+function b8sec(Gr, P0, P1, t0, { color = OC.x1 } = {}) {
+  const k = (P1[1] - P0[1]) / (P1[0] - P0[0]), y = x => P0[1] + k * (x - P0[0]);
+  const [lo, hi] = Gr.xs;
+  const l = path(Gr.layer, `M${Gr.PX(lo)} ${Gr.PY(y(lo))}L${Gr.PX(hi)} ${Gr.PY(y(hi))}`, { stroke: color, 'stroke-width': 3.5 }, { d: 0 });
+  draw(l, t0, .7);
+  return { x: P0[0] - P0[1] / k, l };
+}
+// «Боковая» парабола x = P(y) через три точки графика φ′ (обратная квадратичная интерполяция).
+function b8side(Gr, xs3, t0, { color = OC.par } = {}) {
+  const ys3 = xs3.map(Gr.f);
+  const P = y => xs3.reduce((s, xi, i) => s + xi * ys3.reduce((t, yj, j) => j === i ? t : t * (y - yj) / (ys3[i] - yj), 1), 0);
+  let d = '', pen = false;
+  const [ylo, yhi] = Gr.ys;
+  for (let i = 0; i <= 300; i++) {
+    const y = ylo + (yhi - ylo) * i / 300, x = P(y);
+    if (x < Gr.xs[0] - .05 || x > Gr.xs[1] + .05) { pen = false; continue; }
+    d += (pen ? 'L' : 'M') + Gr.PX(x).toFixed(1) + ' ' + Gr.PY(y).toFixed(1); pen = true;
+  }
+  const c = path(Gr.layer, d, { stroke: color, 'stroke-width': 4, 'stroke-dasharray': '12 9' }, { o: 0 });
+  show(c, t0, .6);
+  return P(0);
+}
+
+const BEATS = [
+  ['intro', 'Глава 8', (m, D) => introCard(m, D, 'ЛР2 · Глава 8', 'Метод Брента (ЛР2)', 'корень φ′ · точки b, a, c · секущая · интерполяция · бисекция')],
+
+  ['idea', 'Минимум = корень φ′', (m) => {
+    const p = panel(0);
+    kick(p, '8.1 · Минимум выпуклой φ — корень уравнения φ′(x) = 0');
+    const g1 = graph(p, 'phi2', { x0: 120, y0: 400, w: 800, h: 220, xs: [2, 6, .5], ys: [-11, -7, 1], yl: 'φ(x)', t0: m('phi') });
+    const g2 = graph(p, dphi, { x0: 120, y0: 820, w: 800, h: 300, xs: [2, 6, .5], ys: [-4, 2, 1], yl: 'φ′(x)', color: OC.d, t0: m('dphi') });
+    b8zero(g2, m('dphi') + .5);
+    tex(p, '\\varphi=-f\\ \\text{— выпуклая на }[2;\\,6]', 1000, 170, m('phi') + .5, { size: 34 });
+    fdot(g2, 2, m('ends'), { color: OC.bad, label: '' });
+    fval(g2, 2, '−3,679', m('ends') + .2, { color: OC.bad, dx: 20, dy: 6 });
+    fdot(g2, 6, m('ends') + .6, { color: OC.x1, label: '' });
+    fval(g2, 6, '+1,494', m('ends') + .8, { color: OC.x1, dx: -20, dy: -24, anchor: 'end' });
+    texRows(p, ['\\varphi\'(2)=-10e^{-1}\\approx-3{,}679<0', '\\varphi\'(6)=30e^{-3}\\approx1{,}494>0'], 1000, 270, [m('ends') + .3, m('ends') + .9], { size: 32, dy: 76 });
+    fdot(g2, 4, m('root'), { color: OC.best, label: 'x* = 4', y: 0 });
+    vline(g1, 4, m('root') + .4, { color: OC.best });
+    fdot(g1, 4, m('root') + .6, { color: OC.best, label: '', drop: false });
+    tex(p, '\\varphi\'(x^*)=0\\ \\Rightarrow\\ x^*=4', 1000, 440, m('root') + .6, { size: 34, color: COL.good });
+    tag(p, 'Брент — метод поиска корня', 1270, 590, COL.task, m('idea'), { size: 28, solid: true });
+    para(p, 'В ЛР1 Брент искал минимум самой f по параболе; здесь — корень φ′.', 1000, 680, m('lr1'), { w: 540, size: 24, fill: COL.dim });
+  }],
+
+  ['points', 'Точки b, a, c', (m) => {
+    const p = panel(0);
+    kick(p, '8.2 · Три точки: b — приближение, a — прошлое b, c — другой знак φ′');
+    const g = b8GD(p);
+    band(g, 2, 6, m('c') + .5, { color: COL.good, op: .1 });
+    fdot(g, 6, m('b'), { color: OC.best, label: '' });
+    fval(g, 6, 'b = 6', m('b') + .2, { color: OC.best, dx: -22, dy: -22, size: 28, anchor: 'end' });
+    fdot(g, 2, m('c'), { color: OC.bad, label: 'c = 2' });
+    fval(g, 2, 'a = c', m('start') + 2, { color: OC.u, dx: 26, dy: -6, size: 28 });
+    const rows = [['b', 'текущее приближение: там, где |φ′| меньше', OC.best, m('b')],
+      ['c', 'φ′ другого знака, чем в b: корень между b и c', OC.bad, m('c')],
+      ['a', 'предыдущее значение b', OC.u, m('a')]];
+    rows.forEach(([k, s, c, t], i) => { tag(p, k, 1010, 200 + i * 105, c, t, { size: 30, solid: true }); para(p, s, 1050, 192 + i * 105, t + .2, { w: 490, size: 25 }); });
+    tex(p, '|\\varphi\'(6)|=1{,}494<|\\varphi\'(2)|=3{,}679', 1000, 500, m('start'), { size: 30 });
+    say(p, '⇒  b = 6,   c = 2,   a = c', 1010, 610, m('start') + 1.5, { size: 30, fill: COL.good, weight: 600 });
+    tag(p, 'корень всегда между b и c', 1270, 720, COL.task, m('keep'), { size: 28, solid: true });
+  }],
+
+  ['steps', 'Секущая и интерполяция', (m) => {
+    const p = panel(0);
+    kick(p, '8.3 · Секущая по двум точкам, обратная квадратичная интерполяция — по трём');
+    const g = b8GD(p);
+    const d2 = fdot(g, 2, m('sec'), { color: OC.u, label: 'a = c = 2' });
+    const d6 = fdot(g, 6, m('sec') + .3, { color: OC.best, label: '' });
+    const l6 = fval(g, 6, 'b = 6', m('sec') + .5, { color: OC.best, dx: -22, dy: -22, size: 28, anchor: 'end' });
+    const S = b8sec(g, [2, dphi(2)], [6, dphi(6)], m('sec') + .6);
+    const u1 = fdot(g, S.x, m('zero'), { color: OC.x1, y: 0, label: '4,844938', ly: 64 });
+    tex(p, 'u=b-\\varphi\'(b)\\,\\dfrac{b-a}{\\varphi\'(b)-\\varphi\'(a)}', 1000, 170, m('sec') + .4, { size: 34 });
+    tex(p, '=6-1{,}494\\cdot\\dfrac{4}{1{,}494+3{,}679}\\approx4{,}844938', 1000, 280, m('zero'), { size: 30, color: COL.good });
+    // три точки после первой итерации: a = 6, b = 4,844938, c = 2
+    tw(S.l, { o: .2 }, m('three'), .4); hide(u1, m('three'), .3); hide(d2, m('three'), .3);
+    const b1 = ROWS[0][1];
+    hide(d6, m('three'), .3); hide(l6, m('three'), .3);
+    fdot(g, 6, m('three') + .2, { color: OC.u, label: '' });
+    fval(g, 6, 'a = 6', m('three') + .3, { color: OC.u, dx: -22, dy: -22, size: 28, anchor: 'end' });
+    fdot(g, b1, m('three') + .2, { color: OC.best, label: '' });
+    fval(g, b1, 'b', m('three') + .3, { color: OC.best, dx: -10, dy: -24, size: 28, anchor: 'end' });
+    fdot(g, 2, m('three') + .4, { color: OC.bad, label: 'c = 2' });
+    say(p, 'итерация 2:  a = 6,  b = 4,844938,  c = 2', 1000, 430, m('three'), { size: 26, fill: COL.dim, weight: 600 });
+    const u = b8side(g, [6, b1, 2], m('flip'));
+    tex(p, 'x=P(y)\\ \\text{через три точки}', 1000, 470, m('flip') + .4, { size: 32, color: OC.par });
+    fdot(g, u, m('iqi'), { color: OC.par, y: 0, label: '3,409291', ly: 64 });
+    tex(p, 'u=P(0)\\approx3{,}409291', 1000, 560, m('iqi') + .3, { size: 34, color: COL.good });
+    para(p, 'Около корня график φ′ почти прямой — шаги попадают очень близко к корню.', 1000, 700, m('why'), { w: 540, size: 25, fill: COL.dim });
+  }],
+
+  ['safe', 'Страховка и остановка', (m) => {
+    const p = panel(0);
+    kick(p, '8.4 · Деление пополам как страховка; остановка по длине [b; c]');
+    const L = 160, Rr = 860, Y = 230;
+    const ln = path(p, `M${L} ${Y}H${Rr}`, { stroke: COL.good, 'stroke-width': 6 }, { d: 0 }); draw(ln, m('cond') - .3, .6);
+    const tk = (x, s, c, t) => { const gg = G(p, { o: 0 }); mk('path', { d: `M${x} ${Y - 20}V${Y + 20}`, stroke: c, 'stroke-width': 4 }, gg); T(gg, s, { x, y: Y + 56, size: 30, fill: c, anchor: 'middle', font: MATH, weight: 700 }); show(gg, t); };
+    tk(L, 'b', OC.best, m('cond') - .3); tk(Rr, 'c', OC.bad, m('cond') - .3);
+    const bad = G(p, { o: 0 }); mk('circle', { cx: Rr + 110, cy: Y, r: 13, fill: OC.bad }, bad); T(bad, 'вне [b; c]', { x: Rr + 110, y: Y - 34, size: 24, fill: OC.bad, anchor: 'middle', weight: 600 }); show(bad, m('c1'));
+    tk((L + Rr) / 2, 'середина', COL.task, m('bis'));
+    texRows(p, ['1)\\ \\text{новая точка вне отрезка }[b;\\,c]', '2)\\ \\text{шаг больше половины позапрошлого}'], 120, 360, [m('c1'), m('c2')], { size: 34, dy: 84 });
+    tag(p, 'тогда — шаг деления пополам', 470, 580, COL.task, m('bis'), { size: 28, solid: true });
+    say(p, 'не медленнее бисекции, около корня — гораздо быстрее', 470, 660, m('slow'), { size: 26, fill: COL.dim, anchor: 'middle' });
+    say(p, 'Остановка', 1000, 360, m('stop'), { size: 28, fill: COL.dim, weight: 700 });
+    tex(p, '|c-b|\\le\\varepsilon=0{,}002', 1000, 400, m('stop') + .2, { size: 36, color: COL.good });
+    say(p, 'За итерацию', 1000, 560, m('cost'), { size: 28, fill: COL.dim, weight: 700 });
+    say(p, 'одна производная φ′', 1000, 610, m('cost') + .3, { size: 30 });
+    say(p, 'f — один раз, в найденной точке', 1000, 660, m('cost') + 2.5, { size: 30 });
+  }],
+
+  ['q1', 'Проверка: точки и правила', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    const g = b8GD(p, { w: 760 });
+    fdot(g, 2, .4, { color: OC.bad, label: '' }); fval(g, 2, '−3,679', .5, { color: OC.bad, dx: 20, dy: 6 });
+    fdot(g, 6, .6, { color: OC.x1, label: '' }); fval(g, 6, '+1,494', .7, { color: OC.x1, dx: -20, dy: -24, anchor: 'end' });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-b0', prompt: ['φ′(2) = −3,679, φ′(6) = +1,494. Как программа расставит точки на старте?'],
+    build: choice(['b = 6, c = 2, a = c', 'b = 2, c = 6, a = c', 'b = 4, a = 2, c = 6', 'b = 6, a = 4, c = 2'], 0,
+      'b — где |φ′| меньше: 1,494 < 3,679. c = a = 2, знак φ′ там другой.',
+      [null, 'В двойке |φ′| больше — это c, а не b.', 'Середина отрезка в методе не стартовая точка.', 'Точки 4 на старте нет: a — прошлое b, его ещё нет.']),
+  }, {
+    id: 'c-out', prompt: ['Обратная интерполяция дала точку вне отрезка [b; c]. Что сделает метод?'],
+    build: choice(['шаг деления пополам', 'остановится', 'всё равно возьмёт эту точку', 'начнёт сначала с концов [2; 6]'], 0,
+      'Это первое из двух условий отказа от интерполяции.',
+      [null, 'Остановка — только по длине [b; c].', 'Корня вне [b; c] нет, туда шагать незачем.', 'Отрезок только сужается.']),
+  }, {
+    id: 'c-stop', prompt: ['Когда метод Брента останавливается?'],
+    build: choice(['длина [b; c] не больше ε', '|φ′(b)| ≤ ε', 'после заранее известного числа итераций', 'когда шаг — деление пополам'], 0,
+      'В коде: |m| = |c − b|/2 ≤ tol = ε/2.',
+      [null, 'Это условие метода касательных, а не Брента.', 'Число итераций Брента заранее не известно.', 'Бисекция — страховка, а не конец.']),
+  }], done) }],
+
+  ['code1', 'Листинг: начало', (m) => {
+    const p = panel(0);
+    kick(p, '8.5 · Функция brent: подготовка и условие остановки (строки 55–71)');
+    b8code(p, 55, 71, [[56, 57, 'l56'], [59, 60, 'l59'], [61, 62, 'l61'], [63, 63, 'l63'], [64, 64, 'l64'], [66, 67, 'l66'], [68, 69, 'l68'], [70, 71, 'l70']], m, { y: 140, size: 18, w: 870 });
+    say(p, 'ваш запуск: a = 2, b = 6, ε = 0,002', 1000, 170, .6, { size: 24, fill: COL.dim, weight: 600 });
+    [['φ′(2) = −3,679,  φ′(6) = +1,494;  cnt = 2', 'l56'],
+      ['(−3,679)·1,494 < 0 — знаки разные, ошибки нет', 'l59'],
+      ['|−3,679| > |1,494| — обмена нет, b = 6', 'l61'],
+      ['c = a = 2', 'l63'],
+      ['d = e = b − a = 4', 'l64'],
+      ['tol = 0,001,   m = (2 − 6)/2 = −2', 'l66'],
+      ['|m| = 2 > tol — продолжаем', 'l68'],
+      ['it = 1, пока step = «бисекция»', 'l70']].forEach(([s, k], i) => b8note(p, s, 240 + i * 74, m(k), { x: 1000, w: 540, size: 24 }));
+  }],
+
+  ['code2', 'Листинг: выбор шага', (m) => {
+    const p = panel(0);
+    kick(p, '8.6 · Выбор шага: секущая, интерполяция или бисекция (строки 72–101)');
+    b8code(p, 72, 101, [[72, 73, 'l72'], [74, 78, 'l74'], [79, 85, 'l80'], [86, 89, 'l86'], [90, 95, 'l92'], [96, 98, 'l96'], [99, 101, 'l99']], m, { y: 118, size: 17, w: 780 });
+    const X = 900, W = 640;
+    [['|e| ≥ tol и |φ′(a)| > |φ′(b)| — пробуем', 'l72', 150],
+      ['a == c: две точки → секущая', 'l74', 220],
+      ['иначе три точки → обратная квадратичная интерполяция; шаг = p/q', 'l80', 290],
+      ['p ≥ 0, знак шага — в q', 'l86', 400]].forEach(([s, k, y]) => b8note(p, s, y, m(k), { x: X, w: W }));
+    say(p, 'строка 92 — шаг принимается, если', X, 480, m('l92'), { size: 25, fill: COL.task, weight: 700 });
+    say(p, '• точка внутри отрезка', X, 522, m('l92') + 1.5, { size: 25 });
+    say(p, '• шаг < ½ позапрошлого (|d| < |e|/2)', X, 562, m('l92') + 3, { size: 25 });
+    b8note(p, 'итерация 1: p = 1,624, q = −1,406', 620, m('ex'), { x: X, w: W, fill: COL.good });
+    b8note(p, 'd = p/q = −1,155 ⇒ u = 6 − 1,155 = 4,844938', 660, m('ex') + 1.5, { x: X, w: W, fill: COL.good });
+    b8note(p, 'не прошла: d = e = m — деление пополам', 730, m('l96'), { x: X, w: W, fill: OC.bad });
+    b8note(p, 'не пробовали — тоже d = e = m', 790, m('l99'), { x: X, w: W, fill: OC.bad });
+  }],
+
+  ['code3', 'Листинг: новая точка', (m) => {
+    const p = panel(0);
+    kick(p, '8.7 · Новая точка и отрезок с корнем (строки 102–121)');
+    b8code(p, 102, 121, [[102, 102, 'l102'], [103, 107, 'l104'], [108, 109, 'l108'], [111, 114, 'l112'], [115, 117, 'l115'], [118, 119, 'l118'], [120, 121, 'l121']], m, { y: 130, size: 19 });
+    [['a := b — прошлое приближение', 'l102', 160],
+      ['b += d;  если |d| ≤ tol — сдвиг ровно на tol', 'l104', 220],
+      ['новая φ′(b), cnt += 1', 'l108', 300],
+      ['знак как у c ⇒ c := a', 'l112', 360],
+      ['|φ′(c)| < |φ′(b)| ⇒ b и c меняются местами', 'l115', 420]].forEach(([s, k, y]) => b8note(p, s, y, m(k)));
+    [['итерация 2: u = 3,409291, φ′(u) < 0 — как в c', 0], ['⇒ c := a = 4,844938', 2.5], ['|φ′(c)| = 0,908 < |φ′(b)| = 0,916 ⇒ b ↔ c', 5], ['⇒ b = 4,844938, a = c = 3,409291', 7.5], ['⇒ шаг 3 — снова секущая', 10]]
+      .forEach(([s, dt], i) => b8note(p, s, 500 + i * 38, m('ex') + dt, { fill: COL.good, size: 24 }));
+    b8note(p, 'строка таблицы 2: k, u, φ′(u), шаг, [b; c]', 720, m('l118'));
+    b8note(p, 'вернёт 4,000306;  10,8268225957;  6;  9', 780, m('l121'), { fill: COL.task, weight: 700 });
+  }],
+
+  ['q2', 'Проверка: код', () => {
+    const p = panel(0); kick(p, 'Проверка');
+    codeBlock(p, b8lines(102, 109), 96, 160, .3, { first: 102, size: 19, w: 870 });
+    codeBlock(p, b8lines(72, 78), 96, 470, .5, { first: 72, size: 19, w: 870 });
+  }, { ask: done => quiz(QR, [{
+    id: 'c-first', prompt: ['Почему на первой итерации программа делает шаг секущей?'],
+    build: choice(['после строки 63 a совпадает с c — различных точек две', 'секущая и интерполяция всегда чередуются', 'интерполяция вышла за отрезок', 'потому что φ′(b) > 0'], 0,
+      'Известны только концы отрезка; в коде это условие if a == c.',
+      [null, 'Такого правила нет: чередование в таблице 2 — следствие перестановок точек.', 'Тогда была бы бисекция, а не секущая.', 'Знак φ′ не определяет вид шага.']),
+  }, {
+    id: 'c-cnt', prompt: ['ε = 0,002. Чему равны tol и cnt после третьей итерации?'],
+    build: numIn([{ parts: ['tol = ', { num: 0.001, tol: 1e-9, d: 3, w: 7 }], why: 'tol = ε/2 = 0,001.' },
+      { parts: ['cnt = ', { num: 5, tol: 0, d: 0, w: 5 }], why: '2 на концах + по одному на итерацию: 2 + 3 = 5.' }]),
+  }, {
+    id: 'c-tiny', prompt: ['Шестая итерация: секущая дала шаг d ≈ −0,000305 при tol = 0,001. Куда сдвинется b?'],
+    build: choice(['ровно на tol влево: b − 0,001', 'на d: b − 0,000305', 'в середину отрезка', 'никуда — метод остановится'], 0,
+      'Строки 104–107: |d| ≤ tol ⇒ b += −tol, так как m < 0. Отсюда 4,000306 → 3,999306.',
+      [null, 'Слишком маленький шаг программа заменяет на tol.', 'Бисекция выбирается раньше, в строках 92–101.', 'Остановка проверяется в начале цикла по |m|.']),
+  }], done) }],
+
+  ['run', 'Таблица 2', (m) => {
+    const p = panel(0);
+    kick(p, '8.8 · Таблица 2 — итерации метода Брента (поиск корня φ′(x) = 0)');
+    const g = b8GD(p, { w: 660 });
+    const ts = ['s1', 's2', 's3', 's4', 's5', 's6'].map(m);
+    const B = band(g, 2, 6, .6, { color: COL.good, op: .12 });
+    let prev = [];
+    RB.steps.slice(1).forEach((s, i) => {
+      const [, u, , kind] = s.row, t = ts[i];
+      moveBand(g, B, s.a, s.b, t + .2);
+      prev.forEach(e => tw(e, { o: .25 }, t, .3));
+      prev = [fdot(g, u, t, { color: B8K[kind], label: i < 3 ? String(i + 1) : '', y: dphi(u), ly: i % 2 ? 64 : 34 })];
+    });
+    const T0 = table(p, { x: 826, y: 160, cols: [['k', 36], ['u', 118], ['φ′(u)', 152], ['шаг', 158], ['корень в отрезке', 262]], rh: 50, size: 20, t0: ts[0] - .3, mono: [0, 1, 2, 4] });
+    ROWS.forEach((r, i) => T0.row([String(r[0]), b8f(r[1]), b8s(r[2]), { t: r[3], c: B8K[r[3]] }, `[${b8f(r[4])}; ${b8f(r[5])}]`], ts[i]));
+    T0.hl(0, OC.x1, m('first'));
+    para(p, 'Первая итерация — секущая: известны только концы отрезка.', 850, 540, m('first') + .3, { w: 680, size: 25 });
+    tag(p, 'деление пополам — ни разу', 1010, 640, COL.good, m('nobis'), { size: 26, solid: true });
+    tag(p, 'отрезок: 4 → 0,001', 1370, 640, COL.task, m('len'), { size: 26, solid: true });
+    say(p, 'шаг 6: |d| < tol ⇒ сдвиг ровно на 0,001', 850, 740, m('s6') + 1.5, { size: 23, fill: COL.dim });
+  }],
+
+  ['result', 'Ответ и таблица 4', (m) => {
+    const p = panel(0);
+    kick(p, '8.9 · Ответ, 9 вычислений и столбец Брента в таблице 4');
+    tex(p, 'x=4{,}000306', 120, 160, m('x'), { size: 44, color: COL.good });
+    tex(p, 'f(x)=10{,}8268225957', 120, 240, m('x') + .5, { size: 44, color: COL.good });
+    const parts = [['2', 'φ′ на концах отрезка', COL.whole, m('two')], ['6', 'по одной φ′ на итерацию', COL.task, m('six')], ['1', 'f в найденной точке', COL.good, m('one')]];
+    parts.forEach(([n, s, c, t], i) => { tag(p, n, 170, 410 + i * 84, c, t, { size: 34, solid: true }); say(p, s, 230, 422 + i * 84, t + .2, { size: 30 }); });
+    say(p, '= 9 вычислений', 120, 700, m('one') + .8, { size: 44, weight: 600 });
+    const E = ['0,1', '0,01', '0,002', '0,001', '0,0001', '0,00001'], BR = [8, 8, 9, 9, 10, 10];
+    say(p, 'Таблица 4 — вычислений при разных ε', 960, 160, m('tbl'), { size: 24, fill: COL.dim, weight: 600 });
+    const tb = table(p, { x: 960, y: 180, cols: [['ε', 240], ['метод Брента', 240]], rh: 58, size: 30, t0: m('tbl'), mono: [0, 1] });
+    E.forEach((e, i) => tb.row([e, String(BR[i])], m('tbl') + .4 + i * .5));
+    tb.hl(2, COL.task, m('tbl') + 3.5);
+    tag(p, 'от 0,1 до 0,00001: всего 8 → 10', 1200, 620, COL.good, m('flat'), { size: 26, solid: true });
+    para(p, 'Около корня интерполяция сразу даёт очень точную точку: лишние знаки точности стоят 1–2 вычисления.', 960, 700, m('why'), { w: 580, size: 24, fill: COL.dim });
+  }],
+
+  ['sum', 'Главное', (m) => {
+    const p = panel(0);
+    wrapList(p, [['Минимум выпуклой φ — корень φ′(x) = 0. Точки b, a, c; корень всегда между b и c.', 'w1'],
+      ['Секущая по двум точкам, обратная интерполяция по трём; вне [b; c] или шаг > ½ позапрошлого — деление пополам. Стоп: |c − b| ≤ ε.', 'w2'],
+      ['ЛР2: 6 итераций, 9 = 2 + 6 + 1 вычислений, x = 4,000306; погрешность по x 3,06·10⁻⁴ против 7,64·10⁻⁴ у касательных.', 'w3'],
+      ['Вывод отчёта: Брент лучше — нужна только φ′, интерполяция быстрая, бисекция страхует; при ε = 0,00001 — 10 вычислений против 40.', 'w4']], m, { size: 29, dy: 150 });
+  }],
+
+  ['final1', 'Практика 1', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-sec', prompt: ['Третья итерация из таблицы 2: b = 4,844938, φ′(b) = +0,907796; a = c = 3,409291, φ′(a) = −0,915503. Сделайте шаг секущей u = b − φ′(b)·(b − a)/(φ′(b) − φ′(a)). В новой точке φ′(u) = +0,170410 — каким станет отрезок с корнем?'],
+    build: numIn([{ parts: ['u = ', { num: 4.130149, tol: 3e-4 }], why: 'u = 4,844938 − 0,907796·1,435647/1,823299 ≈ 4,130149.' },
+      { parts: ['корень от ', { num: 3.409291, tol: 2e-5 }], why: 'φ′(u) > 0, а в c = 3,409291 знак минус — c остаётся.' },
+      { parts: ['корень до ', { num: 4.130149, tol: 3e-4 }], why: '|φ′(u)| = 0,170 < |φ′(c)| = 0,916, поэтому b = u = 4,130149.' }]),
+  }], done, 'Практика главы   1 из 3') }],
+
+  ['final2', 'Практика 2', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-stop', prompt: ['ε = 0,002. После пятой итерации b = 4,000306, c = 3,990883. Посчитайте tol и |m| = |c − b|/2 (строки 66–67). На шестой итерации секущая дала шаг d ≈ −0,000305: какой будет новая точка u (строки 104–107)? После шестой итерации b = 4,000306, c = 3,999306 — чему равно |m|?'],
+    build: numIn([{ parts: ['tol = ', { num: 0.001, tol: 1e-9, d: 3, w: 7 }], why: 'tol = ε/2 = 0,001.' },
+      { parts: ['|m| после 5-й = ', { num: 0.0047115, tol: 2e-5, d: 6 }], why: '|3,990883 − 4,000306|/2 = 0,004712 > tol — нужна шестая итерация.' },
+      { parts: ['u = ', { num: 3.999306, tol: 3e-6 }], why: '|d| ≤ tol ⇒ b − tol = 4,000306 − 0,001 = 3,999306.' },
+      { parts: ['|m| после 6-й = ', { num: 0.0005, tol: 2e-6, d: 4 }], why: '0,001/2 = 0,0005 ≤ tol — остановка.' }]),
+  }], done, 'Практика главы   2 из 3') }],
+
+  ['final3', 'Практика 3', () => { panel(0); }, { ask: done => quiz(SCREEN, [{
+    id: 'p-cnt', prompt: ['Функция brent возвращает cnt + 1, где cnt = 2 + число итераций. По столбцу Брента в таблице 4 найдите число итераций.'],
+    build: numIn([{ parts: ['ε = 0,1 (8 вычислений): итераций ', { num: 5, tol: 0, d: 0, w: 5 }], why: '8 = 2 + n + 1 ⇒ n = 5.' },
+      { parts: ['ε = 0,00001 (10 вычислений): итераций ', { num: 7, tol: 0, d: 0, w: 5 }], why: '10 = 2 + n + 1 ⇒ n = 7.' },
+      { parts: ['tol при ε = 0,00001: ', { num: 0.000005, tol: 1e-10, d: 6, w: 10 }], why: 'tol = ε/2 = 0,000005.' }]),
+  }, {
+    id: 'p-only', prompt: ['Сколько раз за весь расчёт при ε = 0,002 программа вычисляет саму функцию f в методе Брента?'],
+    build: numIn([{ parts: ['вычислений f = ', { num: 1, tol: 0, d: 0, w: 5 }], why: 'Один раз — f(b) в строке 121; остальные 8 вычислений — производная φ′.' }]),
+  }], done, 'Практика главы   3 из 3') }],
+
+  ['finish', 'Финиш', () => { panel(0); }, { ask: finishCard }],
+].map(([id, title, run, extra]) => ({ id, title, run, ...extra }));
+
+boot();
+</script>
+</body>
+</html>

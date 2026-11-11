@@ -1,0 +1,16 @@
+# исходники и черновики не публикуются
+*.pdf
+*.docx
+books/*/pages/
+# рабочие скриншоты проверок и временные файлы
+shots/
+_old/
+tools/tmp/
+__pycache__/
+# сырые дубли голоса tts.py (озвучка лежит в site/opt/chNN/audio)
+content/**/.tts/
+# копии страниц «Сетевичка», использованные как образец
+site/opt/ref/
+# скилл Papermorph восстанавливается из skills-lock.json: npx skills experimental_install
+.claude/
+.agents/
